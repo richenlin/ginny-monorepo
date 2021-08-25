@@ -55,7 +55,7 @@ func NewOptions(v *viper.Viper) (*Options, error) {
 type InitHandlers func(r *gin.Engine)
 
 // NewRouter
-func NewRouter(o *Options, logger *zap.Logger, init InitHandlers, tracer opentracing.Tracer, middleware ...gin.HandlerFunc) *gin.Engine {
+func NewRouter(o *Options, logger *zap.Logger, init InitHandlers, tracer opentracing.Tracer) *gin.Engine {
 	// 配置gin
 	gin.SetMode(o.Mode)
 	r := gin.New()
@@ -64,7 +64,6 @@ func NewRouter(o *Options, logger *zap.Logger, init InitHandlers, tracer opentra
 	r.Use(ginzap.Ginzap(logger, time.RFC3339, true))
 	r.Use(ginzap.RecoveryWithZap(logger, true))
 	r.Use(ginhttp.Middleware(tracer))
-	r.Use(middleware...)
 
 	pprof.Register(r)
 
