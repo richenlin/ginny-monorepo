@@ -5,7 +5,7 @@ import (
 	"log"
 	"net"
 
-	"github.com/gorillazer/ginny/util"
+	util "github.com/gorillazer/ginny-util"
 	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
 	grpc_zap "github.com/grpc-ecosystem/go-grpc-middleware/logging/zap"
 	grpc_recovery "github.com/grpc-ecosystem/go-grpc-middleware/recovery"

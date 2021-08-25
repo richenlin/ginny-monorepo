@@ -9,7 +9,7 @@ import (
 	"github.com/gin-contrib/pprof"
 	ginzap "github.com/gin-contrib/zap"
 	"github.com/gin-gonic/gin"
-	"github.com/gorillazer/ginny/util"
+	util "github.com/gorillazer/ginny-util"
 	consul "github.com/hashicorp/consul/api"
 	"github.com/opentracing-contrib/go-gin/ginhttp"
 	"github.com/opentracing/opentracing-go"

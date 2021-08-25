@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/gorillazer/ginny/naming/consul"
+	consul "github.com/gorillazer/ginny-consul"
 	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
 	grpc_prometheus "github.com/grpc-ecosystem/go-grpc-prometheus"
 	"github.com/grpc-ecosystem/grpc-opentracing/go/otgrpc"
