@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"time"
 
-	consul "github.com/gorillazer/ginny-consul"
 	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
 	grpc_prometheus "github.com/grpc-ecosystem/go-grpc-prometheus"
 	"github.com/grpc-ecosystem/grpc-opentracing/go/otgrpc"
@@ -18,6 +17,7 @@ import (
 
 // ClientOptions
 type ClientOptions struct {
+	Target          string // "consul://xxx" or "http://xxx"
 	Wait            time.Duration
 	Tag             string
 	GrpcDialOptions []grpc.DialOption
@@ -32,12 +32,18 @@ func NewClientOptions(v *viper.Viper) (*ClientOptions, error) {
 	if err = v.UnmarshalKey("grpc.client", o); err != nil {
 		return nil, err
 	}
-
 	return o, nil
 }
 
 // ClientOptional
 type ClientOptional func(o *ClientOptions)
+
+// WithTarget
+func WithTarget(t string) ClientOptional {
+	return func(o *ClientOptions) {
+		o.Target = t
+	}
+}
 
 // WithTimeout
 func WithTimeout(d time.Duration) ClientOptional {
@@ -62,12 +68,11 @@ func WithGrpcDialOptions(options ...grpc.DialOption) ClientOptional {
 
 // Client
 type Client struct {
-	consulOptions *consul.Options
-	o             *ClientOptions
+	options *ClientOptions
 }
 
 // NewClient
-func NewClient(o *ClientOptions, consulOptions *consul.Options, tracer opentracing.Tracer) (*Client, error) {
+func NewClient(o *ClientOptions, tracer opentracing.Tracer) (*Client, error) {
 	grpc_prometheus.EnableClientHandlingTimeHistogram()
 
 	o.GrpcDialOptions = append(o.GrpcDialOptions,
@@ -81,28 +86,26 @@ func NewClient(o *ClientOptions, consulOptions *consul.Options, tracer opentraci
 			otgrpc.OpenTracingStreamClientInterceptor(tracer)),
 		),
 	)
-
 	return &Client{
-		consulOptions: consulOptions,
-		o:             o,
+		options: o,
 	}, nil
 }
 
+// Dial
 func (c *Client) Dial(service string, options ...ClientOptional) (*grpc.ClientConn, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-	defer cancel()
-
 	o := &ClientOptions{
-		Wait:            c.o.Wait,
-		Tag:             c.o.Tag,
-		GrpcDialOptions: c.o.GrpcDialOptions,
+		Target:          c.options.Target,
+		Wait:            c.options.Wait,
+		Tag:             c.options.Tag,
+		GrpcDialOptions: c.options.GrpcDialOptions,
 	}
 	for _, option := range options {
 		option(o)
 	}
+	ctx, cancel := context.WithTimeout(context.Background(), o.Wait)
+	defer cancel()
 
-	target := fmt.Sprintf("consul://%s/%s?wait=%s&tag=%s", c.consulOptions.Addr, service, o.Wait, o.Tag)
-
+	target := fmt.Sprintf("%s/%s?wait=%s&tag=%s", o.Target, service, o.Wait, o.Tag)
 	conn, err := grpc.DialContext(ctx, target, o.GrpcDialOptions...)
 	if err != nil {
 		return nil, errors.Wrap(err, "grpc dial error")

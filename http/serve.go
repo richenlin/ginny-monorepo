@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/gorillazer/ginny-serve/options"
+
 	"github.com/gin-contrib/pprof"
 	ginzap "github.com/gin-contrib/zap"
 	"github.com/gin-gonic/gin"
@@ -27,14 +29,14 @@ type Options struct {
 
 // Server
 type Server struct {
-	o          *Options
-	app        string
-	host       string
-	port       int
-	logger     *zap.Logger
-	router     *gin.Engine
-	httpServer http.Server
-	consulCli  *consul.Client
+	o         *Options
+	app       string
+	host      string
+	port      int
+	logger    *zap.Logger
+	router    *gin.Engine
+	server    http.Server
+	consulCli *consul.Client
 }
 
 // NewOptions
@@ -55,7 +57,7 @@ func NewOptions(v *viper.Viper) (*Options, error) {
 type InitHandlers func(r *gin.Engine)
 
 // NewRouter
-func NewRouter(o *Options, logger *zap.Logger, init InitHandlers, tracer opentracing.Tracer) *gin.Engine {
+func NewRouter(o *Options, logger *zap.Logger, tracer opentracing.Tracer, init InitHandlers) *gin.Engine {
 	// 配置gin
 	gin.SetMode(o.Mode)
 	r := gin.New()
@@ -73,16 +75,11 @@ func NewRouter(o *Options, logger *zap.Logger, init InitHandlers, tracer opentra
 }
 
 // NewServer
-func NewServer(o *Options, logger *zap.Logger, router *gin.Engine, consulCli ...*consul.Client) (*Server, error) {
+func NewServer(o *Options, logger *zap.Logger, router *gin.Engine) (*Server, error) {
 	var s = &Server{
 		logger: logger.With(zap.String("type", "http.Server")),
 		router: router,
-		// consulCli: consulCli,
-		o: o,
-	}
-	// consul
-	if len(consulCli) > 0 && consulCli[0] != nil {
-		s.consulCli = consulCli[0]
+		o:      o,
 	}
 
 	return s, nil
@@ -94,35 +91,31 @@ func (s *Server) Application(name string) {
 }
 
 // Start
-func (s *Server) Start() error {
+func (s *Server) Start(opt *options.ServerOption) error {
 	s.port = s.o.Port
 	if s.port == 0 {
 		s.port = util.GetAvailablePort()
 	}
-
 	// s.host = util.GetLocalIP4()
 	s.host = s.o.Host
-
 	if s.host == "" {
 		return errors.New("get local ipv4 error")
 	}
 
 	addr := fmt.Sprintf("%s:%d", s.host, s.port)
-
-	s.httpServer = http.Server{Addr: addr, Handler: s.router}
+	s.server = http.Server{Addr: addr, Handler: s.router}
 
 	s.logger.Info("http server starting ...", zap.String("addr", addr))
 	go func() {
-		if err := s.httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		if err := s.server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			s.logger.Fatal("start http server err", zap.Error(err))
 			return
 		}
 	}()
 
-	if s.consulCli != nil {
-		if err := s.register(); err != nil {
-			return errors.Wrap(err, "register http server error")
-		}
+	s.consulCli = opt.Consul.Client
+	if err := s.register(); err != nil {
+		return errors.Wrap(err, "register http server error")
 	}
 
 	return nil
@@ -133,13 +126,11 @@ func (s *Server) Stop() error {
 	s.logger.Info("stopping http server")
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5) // 平滑关闭,等待5秒钟处理
 	defer cancel()
-	if s.consulCli != nil {
-		if err := s.deRegister(); err != nil {
-			return errors.Wrap(err, "deregister http server error")
-		}
+	if err := s.deRegister(); err != nil {
+		return errors.Wrap(err, "deregister http server error")
 	}
 
-	if err := s.httpServer.Shutdown(ctx); err != nil {
+	if err := s.server.Shutdown(ctx); err != nil {
 		return errors.Wrap(err, "shutdown http server error")
 	}
 
@@ -148,6 +139,9 @@ func (s *Server) Stop() error {
 
 // register
 func (s *Server) register() error {
+	if s.consulCli == nil {
+		return nil
+	}
 	addr := fmt.Sprintf("%s:%d", s.host, s.port)
 
 	check := &consul.AgentServiceCheck{
@@ -180,6 +174,9 @@ func (s *Server) register() error {
 
 // deRegister
 func (s *Server) deRegister() error {
+	if s.consulCli == nil {
+		return nil
+	}
 	id := fmt.Sprintf("%s[%s:%d]", s.app, s.host, s.port)
 
 	err := s.consulCli.Agent().ServiceDeregister(id)

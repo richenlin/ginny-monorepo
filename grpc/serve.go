@@ -5,6 +5,7 @@ import (
 	"log"
 	"net"
 
+	"github.com/gorillazer/ginny-serve/options"
 	util "github.com/gorillazer/ginny-util"
 	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
 	grpc_zap "github.com/grpc-ecosystem/go-grpc-middleware/logging/zap"
@@ -54,16 +55,10 @@ type Server struct {
 type InitServers func(s *grpc.Server)
 
 // NewServer
-func NewServer(o *Options, logger *zap.Logger, init InitServers, consulCli *consul.Client, tracer opentracing.Tracer) (*Server, error) {
+func NewServer(o *Options, logger *zap.Logger, tracer opentracing.Tracer, init InitServers) (*Server, error) {
 	// initialize grpc server
 	var gs *grpc.Server
 	logger = logger.With(zap.String("type", "grpc"))
-	s := &Server{
-		o:         o,
-		logger:    logger.With(zap.String("type", "grpc.Server")),
-		server:    gs,
-		consulCli: consulCli,
-	}
 
 	{
 		grpc_prometheus.EnableHandlingTimeHistogram()
@@ -86,6 +81,12 @@ func NewServer(o *Options, logger *zap.Logger, init InitServers, consulCli *cons
 		init(gs)
 	}
 
+	s := &Server{
+		o:      o,
+		logger: logger.With(zap.String("type", "grpc.Server")),
+		server: gs,
+	}
+
 	return s, nil
 }
 
@@ -95,7 +96,7 @@ func (s *Server) Application(name string) {
 }
 
 // Start
-func (s *Server) Start() error {
+func (s *Server) Start(opt *options.ServerOption) error {
 	s.port = s.o.Port
 	if s.port == 0 {
 		s.port = util.GetAvailablePort()
@@ -121,6 +122,8 @@ func (s *Server) Start() error {
 			s.logger.Fatal("failed to serve: %v", zap.Error(err))
 		}
 	}()
+
+	s.consulCli = opt.Consul.Client
 	if err := s.register(); err != nil {
 		return errors.Wrap(err, "register grpc server error")
 	}
@@ -141,6 +144,9 @@ func (s *Server) Stop() error {
 
 // register
 func (s *Server) register() error {
+	if s.consulCli == nil {
+		return nil
+	}
 	addr := fmt.Sprintf("%s:%d", s.host, s.port)
 
 	for key, _ := range s.server.GetServiceInfo() {
@@ -175,6 +181,9 @@ func (s *Server) register() error {
 
 // deRegister
 func (s *Server) deRegister() error {
+	if s.consulCli == nil {
+		return nil
+	}
 	for key, _ := range s.server.GetServiceInfo() {
 		id := fmt.Sprintf("%s[%s:%d]", key, s.host, s.port)
 
