@@ -43,7 +43,7 @@ func NewServerOptions(v *viper.Viper) (*Options, error) {
 // Server
 type Server struct {
 	o         *Options
-	app       string
+	appName   string
 	host      string
 	port      int
 	logger    *zap.Logger
@@ -90,9 +90,14 @@ func NewServer(o *Options, logger *zap.Logger, tracer opentracing.Tracer, init I
 	return s, nil
 }
 
-// Application
-func (s *Server) Application(name string) {
-	s.app = name
+// AppName
+func (s *Server) AppName(name string) {
+	s.appName = name
+}
+
+// ConsulClient
+func (s *Server) ConsulClient(cli *consul.Client) {
+	s.consulCli = cli
 }
 
 // Start
@@ -123,7 +128,9 @@ func (s *Server) Start(opt *options.ServerOption) error {
 		}
 	}()
 
-	s.consulCli = opt.Consul.Client
+	if opt.Consul != nil {
+		s.consulCli = opt.Consul
+	}
 	if err := s.register(); err != nil {
 		return errors.Wrap(err, "register grpc server error")
 	}
@@ -160,7 +167,7 @@ func (s *Server) register() error {
 
 		svcReg := &consul.AgentServiceRegistration{
 			ID:                id,
-			Name:              key,
+			Name:              s.appName + "_" + key,
 			Tags:              []string{"grpc"},
 			Port:              s.port,
 			Address:           s.host,

@@ -6,11 +6,10 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/gorillazer/ginny-serve/options"
-
 	"github.com/gin-contrib/pprof"
 	ginzap "github.com/gin-contrib/zap"
 	"github.com/gin-gonic/gin"
+	"github.com/gorillazer/ginny-serve/options"
 	util "github.com/gorillazer/ginny-util"
 	consul "github.com/hashicorp/consul/api"
 	"github.com/opentracing-contrib/go-gin/ginhttp"
@@ -30,7 +29,7 @@ type Options struct {
 // Server
 type Server struct {
 	o         *Options
-	app       string
+	appName   string
 	host      string
 	port      int
 	logger    *zap.Logger
@@ -77,7 +76,7 @@ func NewRouter(o *Options, logger *zap.Logger, tracer opentracing.Tracer, init I
 // NewServer
 func NewServer(o *Options, logger *zap.Logger, router *gin.Engine) (*Server, error) {
 	var s = &Server{
-		logger: logger.With(zap.String("type", "http.Server")),
+		logger: logger.With(zap.String("type", "http")),
 		router: router,
 		o:      o,
 	}
@@ -85,9 +84,14 @@ func NewServer(o *Options, logger *zap.Logger, router *gin.Engine) (*Server, err
 	return s, nil
 }
 
-// Application
-func (s *Server) Application(name string) {
-	s.app = name
+// AppName
+func (s *Server) AppName(name string) {
+	s.appName = name
+}
+
+// ConsulClient
+func (s *Server) ConsulClient(cli *consul.Client) {
+	s.consulCli = cli
 }
 
 // Start
@@ -112,8 +116,10 @@ func (s *Server) Start(opt *options.ServerOption) error {
 			return
 		}
 	}()
+	if opt.Consul != nil {
+		s.consulCli = opt.Consul
+	}
 
-	s.consulCli = opt.Consul.Client
 	if err := s.register(); err != nil {
 		return errors.Wrap(err, "register http server error")
 	}
@@ -150,11 +156,11 @@ func (s *Server) register() error {
 		TCP:                            addr,
 	}
 
-	id := fmt.Sprintf("%s[%s:%d]", s.app, s.host, s.port)
+	id := fmt.Sprintf("%s[%s:%d]", s.appName, s.host, s.port)
 
 	svcReg := &consul.AgentServiceRegistration{
 		ID:                id,
-		Name:              string(s.app),
+		Name:              string(s.appName),
 		Tags:              []string{"http"},
 		Port:              s.port,
 		Address:           s.host,
@@ -177,7 +183,7 @@ func (s *Server) deRegister() error {
 	if s.consulCli == nil {
 		return nil
 	}
-	id := fmt.Sprintf("%s[%s:%d]", s.app, s.host, s.port)
+	id := fmt.Sprintf("%s[%s:%d]", s.appName, s.host, s.port)
 
 	err := s.consulCli.Agent().ServiceDeregister(id)
 	if err != nil {

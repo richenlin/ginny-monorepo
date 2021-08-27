@@ -1,7 +1,7 @@
 package options
 
 import (
-	consul "github.com/gorillazer/ginny-consul"
+	consul "github.com/hashicorp/consul/api"
 )
 
 // ServerOption
