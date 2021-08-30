@@ -114,7 +114,7 @@ func (s *Server) Start(opts ...options.ServerOptional) error {
 
 	addr := fmt.Sprintf("%s:%d", o.Host, o.Port)
 
-	s.logger.Info("grpc server starting ...", zap.String("addr", addr))
+	log.Println("grpc server starting ...", zap.String("addr", addr))
 	go func() {
 		lis, err := net.Listen("tcp", addr)
 		if err != nil {
@@ -122,7 +122,7 @@ func (s *Server) Start(opts ...options.ServerOptional) error {
 		}
 
 		if err := s.server.Serve(lis); err != nil {
-			s.logger.Fatal("failed to serve: %v", zap.Error(err))
+			log.Fatalf("failed to serve: %v", zap.Error(err))
 		}
 	}()
 
@@ -138,7 +138,7 @@ func (s *Server) Start(opts ...options.ServerOptional) error {
 
 // Stop
 func (s *Server) Stop() error {
-	s.logger.Info("grpc server stopping ...")
+	log.Println("grpc server stopping ...")
 	if err := s.deRegister(); err != nil {
 		return errors.Wrap(err, "deregister grpc server error")
 	}

@@ -3,6 +3,7 @@ package http
 import (
 	"context"
 	"fmt"
+	"log"
 	"net/http"
 	"time"
 
@@ -108,10 +109,10 @@ func (s *Server) Start(opts ...options.ServerOptional) error {
 	addr := fmt.Sprintf("%s:%d", o.Host, o.Port)
 	s.server = http.Server{Addr: addr, Handler: s.router}
 
-	s.logger.Info("http server starting ...", zap.String("addr", addr))
+	log.Println("http server starting ...", zap.String("addr", addr))
 	go func() {
 		if err := s.server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			s.logger.Fatal("start http server err", zap.Error(err))
+			log.Fatal("start http server err", zap.Error(err))
 			return
 		}
 	}()
@@ -128,7 +129,7 @@ func (s *Server) Start(opts ...options.ServerOptional) error {
 
 // Stop
 func (s *Server) Stop() error {
-	s.logger.Info("stopping http server")
+	log.Println("http server stopping ...")
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5) // 平滑关闭,等待5秒钟处理
 	defer cancel()
 	if err := s.deRegister(); err != nil {
