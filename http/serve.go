@@ -113,7 +113,7 @@ func (s *Server) Start(opts ...options.ServerOptional) error {
 	addr := fmt.Sprintf("%s:%d", o.Host, o.Port)
 	s.server = http.Server{Addr: addr, Handler: s.router}
 
-	log.Println("http server starting ...", zap.String("addr", addr))
+	s.logger.Info("http server starting ...", zap.String("addr", addr))
 	go func() {
 		if err := s.server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatal("start http server err", zap.Error(err))
@@ -133,7 +133,7 @@ func (s *Server) Start(opts ...options.ServerOptional) error {
 
 // Stop
 func (s *Server) Stop() error {
-	log.Println("http server stopping ...")
+	s.logger.Info("http server stopping ...")
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5) // 平滑关闭,等待5秒钟处理
 	defer cancel()
 	if err := s.deRegister(); err != nil {
