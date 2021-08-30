@@ -19,19 +19,10 @@ import (
 	"go.uber.org/zap"
 )
 
-// Options
-type Options struct {
-	Host string
-	Port int
-	Mode string
-}
-
 // Server
 type Server struct {
-	o         *Options
 	appName   string
-	host      string
-	port      int
+	option    *options.ServerOption
 	logger    *zap.Logger
 	router    *gin.Engine
 	server    http.Server
@@ -39,10 +30,10 @@ type Server struct {
 }
 
 // NewOptions
-func NewOptions(v *viper.Viper) (*Options, error) {
+func NewOptions(v *viper.Viper) (*options.ServerOption, error) {
 	var (
 		err error
-		o   = new(Options)
+		o   = new(options.ServerOption)
 	)
 
 	if err = v.UnmarshalKey("http", o); err != nil {
@@ -56,7 +47,7 @@ func NewOptions(v *viper.Viper) (*Options, error) {
 type InitHandlers func(r *gin.Engine)
 
 // NewRouter
-func NewRouter(o *Options, logger *zap.Logger, tracer opentracing.Tracer, init InitHandlers) *gin.Engine {
+func NewRouter(o *options.ServerOption, logger *zap.Logger, tracer opentracing.Tracer, init InitHandlers) *gin.Engine {
 	// 配置gin
 	gin.SetMode(o.Mode)
 	r := gin.New()
@@ -74,11 +65,11 @@ func NewRouter(o *Options, logger *zap.Logger, tracer opentracing.Tracer, init I
 }
 
 // NewServer
-func NewServer(o *Options, logger *zap.Logger, router *gin.Engine) (*Server, error) {
+func NewServer(o *options.ServerOption, logger *zap.Logger, router *gin.Engine) (*Server, error) {
 	var s = &Server{
 		logger: logger.With(zap.String("type", "http")),
 		router: router,
-		o:      o,
+		option: o,
 	}
 
 	return s, nil
@@ -95,18 +86,26 @@ func (s *Server) ConsulClient(cli *consul.Client) {
 }
 
 // Start
-func (s *Server) Start(opt *options.ServerOption) error {
-	s.port = s.o.Port
-	if s.port == 0 {
-		s.port = util.GetAvailablePort()
+func (s *Server) Start(opts ...options.ServerOptional) error {
+	o := &options.ServerOption{
+		Host: s.option.Host,
+		Port: s.option.Port,
+		Mode: s.option.Mode,
 	}
-	// s.host = util.GetLocalIP4()
-	s.host = s.o.Host
-	if s.host == "" {
-		return errors.New("get local ipv4 error")
+	for _, opt := range opts {
+		opt(o)
 	}
 
-	addr := fmt.Sprintf("%s:%d", s.host, s.port)
+	if o.Port == 0 {
+		o.Port = util.GetAvailablePort()
+	}
+	//
+	if o.Host == "" {
+		o.Host = util.GetLocalIP4()
+		// return errors.New("get local ipv4 error")
+	}
+
+	addr := fmt.Sprintf("%s:%d", o.Host, o.Port)
 	s.server = http.Server{Addr: addr, Handler: s.router}
 
 	s.logger.Info("http server starting ...", zap.String("addr", addr))
@@ -116,8 +115,8 @@ func (s *Server) Start(opt *options.ServerOption) error {
 			return
 		}
 	}()
-	if opt.Consul != nil {
-		s.consulCli = opt.Consul
+	if o.Consul != nil {
+		s.consulCli = o.Consul
 	}
 
 	if err := s.register(); err != nil {
@@ -148,7 +147,7 @@ func (s *Server) register() error {
 	if s.consulCli == nil {
 		return nil
 	}
-	addr := fmt.Sprintf("%s:%d", s.host, s.port)
+	addr := fmt.Sprintf("%s:%d", s.option.Host, s.option.Port)
 
 	check := &consul.AgentServiceCheck{
 		Interval:                       "10s",
@@ -156,14 +155,14 @@ func (s *Server) register() error {
 		TCP:                            addr,
 	}
 
-	id := fmt.Sprintf("%s[%s:%d]", s.appName, s.host, s.port)
+	id := fmt.Sprintf("%s[%s:%d]", s.appName, s.option.Host, s.option.Port)
 
 	svcReg := &consul.AgentServiceRegistration{
 		ID:                id,
 		Name:              string(s.appName),
 		Tags:              []string{"http"},
-		Port:              s.port,
-		Address:           s.host,
+		Port:              s.option.Port,
+		Address:           s.option.Host,
 		EnableTagOverride: true,
 		Check:             check,
 		Checks:            nil,
@@ -183,7 +182,7 @@ func (s *Server) deRegister() error {
 	if s.consulCli == nil {
 		return nil
 	}
-	id := fmt.Sprintf("%s[%s:%d]", s.appName, s.host, s.port)
+	id := fmt.Sprintf("%s[%s:%d]", s.appName, s.option.Host, s.option.Port)
 
 	err := s.consulCli.Agent().ServiceDeregister(id)
 	if err != nil {

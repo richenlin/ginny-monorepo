@@ -21,17 +21,11 @@ import (
 	"google.golang.org/grpc"
 )
 
-// Options
-type Options struct {
-	Host string
-	Port int
-}
-
 // NewServerOptions
-func NewServerOptions(v *viper.Viper) (*Options, error) {
+func NewServerOptions(v *viper.Viper) (*options.ServerOption, error) {
 	var (
 		err error
-		o   = new(Options)
+		o   = new(options.ServerOption)
 	)
 	if err = v.UnmarshalKey("grpc", o); err != nil {
 		return nil, err
@@ -42,10 +36,8 @@ func NewServerOptions(v *viper.Viper) (*Options, error) {
 
 // Server
 type Server struct {
-	o         *Options
 	appName   string
-	host      string
-	port      int
+	option    *options.ServerOption
 	logger    *zap.Logger
 	server    *grpc.Server
 	consulCli *consul.Client
@@ -55,7 +47,7 @@ type Server struct {
 type InitServers func(s *grpc.Server)
 
 // NewServer
-func NewServer(o *Options, logger *zap.Logger, tracer opentracing.Tracer, init InitServers) (*Server, error) {
+func NewServer(o *options.ServerOption, logger *zap.Logger, tracer opentracing.Tracer, init InitServers) (*Server, error) {
 	// initialize grpc server
 	var gs *grpc.Server
 	logger = logger.With(zap.String("type", "grpc"))
@@ -82,7 +74,7 @@ func NewServer(o *Options, logger *zap.Logger, tracer opentracing.Tracer, init I
 	}
 
 	s := &Server{
-		o:      o,
+		option: o,
 		logger: logger.With(zap.String("type", "grpc.Server")),
 		server: gs,
 	}
@@ -101,20 +93,26 @@ func (s *Server) ConsulClient(cli *consul.Client) {
 }
 
 // Start
-func (s *Server) Start(opt *options.ServerOption) error {
-	s.port = s.o.Port
-	if s.port == 0 {
-		s.port = util.GetAvailablePort()
+func (s *Server) Start(opts ...options.ServerOptional) error {
+	o := &options.ServerOption{
+		Host: s.option.Host,
+		Port: s.option.Port,
+		Mode: s.option.Mode,
+	}
+	for _, opt := range opts {
+		opt(o)
 	}
 
-	// s.host = util.GetLocalIP4()
-	s.host = s.o.Host
-
-	if s.host == "" {
-		return errors.New("get local ipv4 error")
+	if o.Port == 0 {
+		o.Port = util.GetAvailablePort()
+	}
+	//
+	if o.Host == "" {
+		o.Host = util.GetLocalIP4()
+		// return errors.New("get local ipv4 error")
 	}
 
-	addr := fmt.Sprintf("%s:%d", s.host, s.port)
+	addr := fmt.Sprintf("%s:%d", o.Host, o.Port)
 
 	s.logger.Info("grpc server starting ...", zap.String("addr", addr))
 	go func() {
@@ -128,8 +126,8 @@ func (s *Server) Start(opt *options.ServerOption) error {
 		}
 	}()
 
-	if opt.Consul != nil {
-		s.consulCli = opt.Consul
+	if o.Consul != nil {
+		s.consulCli = o.Consul
 	}
 	if err := s.register(); err != nil {
 		return errors.Wrap(err, "register grpc server error")
@@ -154,7 +152,7 @@ func (s *Server) register() error {
 	if s.consulCli == nil {
 		return nil
 	}
-	addr := fmt.Sprintf("%s:%d", s.host, s.port)
+	addr := fmt.Sprintf("%s:%d", s.option.Host, s.option.Port)
 
 	for key, _ := range s.server.GetServiceInfo() {
 		check := &consul.AgentServiceCheck{
@@ -163,14 +161,14 @@ func (s *Server) register() error {
 			TCP:                            addr,
 		}
 
-		id := fmt.Sprintf("%s[%s:%d]", key, s.host, s.port)
+		id := fmt.Sprintf("%s[%s:%d]", key, s.option.Host, s.option.Port)
 
 		svcReg := &consul.AgentServiceRegistration{
 			ID:                id,
 			Name:              s.appName + "_" + key,
 			Tags:              []string{"grpc"},
-			Port:              s.port,
-			Address:           s.host,
+			Port:              s.option.Port,
+			Address:           s.option.Host,
 			EnableTagOverride: true,
 			Check:             check,
 			Checks:            nil,
@@ -192,7 +190,7 @@ func (s *Server) deRegister() error {
 		return nil
 	}
 	for key, _ := range s.server.GetServiceInfo() {
-		id := fmt.Sprintf("%s[%s:%d]", key, s.host, s.port)
+		id := fmt.Sprintf("%s[%s:%d]", key, s.option.Host, s.option.Port)
 
 		err := s.consulCli.Agent().ServiceDeregister(id)
 		if err != nil {
