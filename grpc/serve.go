@@ -75,7 +75,7 @@ func NewServer(o *options.ServerOption, logger *zap.Logger, tracer opentracing.T
 
 	s := &Server{
 		option: o,
-		logger: logger.With(zap.String("type", "grpc.Server")),
+		logger: logger,
 		server: gs,
 	}
 
@@ -114,7 +114,7 @@ func (s *Server) Start(opts ...options.ServerOptional) error {
 
 	addr := fmt.Sprintf("%s:%d", o.Host, o.Port)
 
-	log.Println("grpc server starting ...", zap.String("addr", addr))
+	s.logger.Info("grpc server starting ...", zap.String("addr", addr))
 	go func() {
 		lis, err := net.Listen("tcp", addr)
 		if err != nil {
@@ -138,7 +138,7 @@ func (s *Server) Start(opts ...options.ServerOptional) error {
 
 // Stop
 func (s *Server) Stop() error {
-	log.Println("grpc server stopping ...")
+	s.logger.Info("grpc server stopping ...")
 	if err := s.deRegister(); err != nil {
 		return errors.Wrap(err, "deregister grpc server error")
 	}

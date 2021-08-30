@@ -10,12 +10,14 @@ import (
 	"github.com/gin-contrib/pprof"
 	ginzap "github.com/gin-contrib/zap"
 	"github.com/gin-gonic/gin"
+	prometheus "github.com/gorillazer/ginny-prometheus"
 	"github.com/gorillazer/ginny-serve/options"
 	util "github.com/gorillazer/ginny-util"
 	consul "github.com/hashicorp/consul/api"
 	"github.com/opentracing-contrib/go-gin/ginhttp"
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/spf13/viper"
 	"go.uber.org/zap"
 )
@@ -57,7 +59,9 @@ func NewRouter(o *options.ServerOption, logger *zap.Logger, tracer opentracing.T
 	r.Use(ginzap.Ginzap(logger, time.RFC3339, true))
 	r.Use(ginzap.RecoveryWithZap(logger, true))
 	r.Use(ginhttp.Middleware(tracer))
-
+	// 添加prometheus 监控
+	r.Use(prometheus.New(r).Middleware())
+	r.GET("/metrics", gin.WrapH(promhttp.Handler()))
 	pprof.Register(r)
 
 	init(r)
@@ -109,7 +113,7 @@ func (s *Server) Start(opts ...options.ServerOptional) error {
 	addr := fmt.Sprintf("%s:%d", o.Host, o.Port)
 	s.server = http.Server{Addr: addr, Handler: s.router}
 
-	log.Println("http server starting ...", zap.String("addr", addr))
+	s.logger.Info("http server starting ...", zap.String("addr", addr))
 	go func() {
 		if err := s.server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatal("start http server err", zap.Error(err))
@@ -129,7 +133,7 @@ func (s *Server) Start(opts ...options.ServerOptional) error {
 
 // Stop
 func (s *Server) Stop() error {
-	log.Println("http server stopping ...")
+	s.logger.Info("http server stopping ...")
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5) // 平滑关闭,等待5秒钟处理
 	defer cancel()
 	if err := s.deRegister(); err != nil {
