@@ -10,12 +10,14 @@ import (
 	"github.com/gin-contrib/pprof"
 	ginzap "github.com/gin-contrib/zap"
 	"github.com/gin-gonic/gin"
+	prometheus "github.com/gorillazer/ginny-prometheus"
 	"github.com/gorillazer/ginny-serve/options"
 	util "github.com/gorillazer/ginny-util"
 	consul "github.com/hashicorp/consul/api"
 	"github.com/opentracing-contrib/go-gin/ginhttp"
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/spf13/viper"
 	"go.uber.org/zap"
 )
@@ -57,7 +59,9 @@ func NewRouter(o *options.ServerOption, logger *zap.Logger, tracer opentracing.T
 	r.Use(ginzap.Ginzap(logger, time.RFC3339, true))
 	r.Use(ginzap.RecoveryWithZap(logger, true))
 	r.Use(ginhttp.Middleware(tracer))
-
+	// 添加prometheus 监控
+	r.Use(prometheus.New(r).Middleware())
+	r.GET("/metrics", gin.WrapH(promhttp.Handler()))
 	pprof.Register(r)
 
 	init(r)
