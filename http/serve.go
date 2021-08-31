@@ -13,7 +13,7 @@ import (
 	prometheus "github.com/gorillazer/ginny-prometheus"
 	"github.com/gorillazer/ginny-serve/options"
 	util "github.com/gorillazer/ginny-util"
-	consul "github.com/hashicorp/consul/api"
+	consulApi "github.com/hashicorp/consul/api"
 	"github.com/opentracing-contrib/go-gin/ginhttp"
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
@@ -52,7 +52,7 @@ type Server struct {
 	logger    *zap.Logger
 	router    *gin.Engine
 	server    http.Server
-	consulCli *consul.Client
+	consulCli *consulApi.Client
 }
 
 // InitHandlers
@@ -95,7 +95,7 @@ func (s *Server) AppName(name string) {
 }
 
 // ConsulClient
-func (s *Server) ConsulClient(cli *consul.Client) {
+func (s *Server) ConsulClient(cli *consulApi.Client) {
 	s.consulCli = cli
 }
 
@@ -163,7 +163,7 @@ func (s *Server) register() error {
 	}
 	addr := fmt.Sprintf("%s:%d", s.option.Host, s.option.Port)
 
-	check := &consul.AgentServiceCheck{
+	check := &consulApi.AgentServiceCheck{
 		Interval:                       "10s",
 		DeregisterCriticalServiceAfter: "60m",
 		TCP:                            addr,
@@ -171,7 +171,7 @@ func (s *Server) register() error {
 
 	id := fmt.Sprintf("%s[%s:%d]", s.appName, s.option.Host, s.option.Port)
 
-	svcReg := &consul.AgentServiceRegistration{
+	svcReg := &consulApi.AgentServiceRegistration{
 		ID:                id,
 		Name:              string(s.appName),
 		Tags:              []string{"http"},

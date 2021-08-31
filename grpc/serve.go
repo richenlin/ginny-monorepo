@@ -13,7 +13,7 @@ import (
 	grpc_ctxtags "github.com/grpc-ecosystem/go-grpc-middleware/tags"
 	grpc_prometheus "github.com/grpc-ecosystem/go-grpc-prometheus"
 	"github.com/grpc-ecosystem/grpc-opentracing/go/otgrpc"
-	consul "github.com/hashicorp/consul/api"
+	consulApi "github.com/hashicorp/consul/api"
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/spf13/viper"
@@ -48,7 +48,7 @@ type Server struct {
 	option    *ServerOption
 	logger    *zap.Logger
 	server    *grpc.Server
-	consulCli *consul.Client
+	consulCli *consulApi.Client
 }
 
 // InitServers
@@ -96,7 +96,7 @@ func (s *Server) AppName(name string) {
 }
 
 // ConsulClient
-func (s *Server) ConsulClient(cli *consul.Client) {
+func (s *Server) ConsulClient(cli *consulApi.Client) {
 	s.consulCli = cli
 }
 
@@ -163,7 +163,7 @@ func (s *Server) register() error {
 	addr := fmt.Sprintf("%s:%d", s.option.Host, s.option.Port)
 
 	for key, _ := range s.server.GetServiceInfo() {
-		check := &consul.AgentServiceCheck{
+		check := &consulApi.AgentServiceCheck{
 			Interval:                       "10s",
 			DeregisterCriticalServiceAfter: "60m",
 			TCP:                            addr,
@@ -171,9 +171,9 @@ func (s *Server) register() error {
 
 		id := fmt.Sprintf("%s[%s:%d]", key, s.option.Host, s.option.Port)
 
-		svcReg := &consul.AgentServiceRegistration{
+		svcReg := &consulApi.AgentServiceRegistration{
 			ID:                id,
-			Name:              s.appName + "_" + key,
+			Name:              key,
 			Tags:              []string{"grpc"},
 			Port:              s.option.Port,
 			Address:           s.option.Host,
