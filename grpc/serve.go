@@ -30,13 +30,16 @@ type ServerOption struct {
 func NewOptions(v *viper.Viper) (*ServerOption, error) {
 	var (
 		err error
-		o   = new(ServerOption)
+		o   = new(options.ServerOption)
+		s   = new(ServerOption)
 	)
 	if err = v.UnmarshalKey("grpc", o); err != nil {
 		return nil, err
 	}
 
-	return o, nil
+	s.Host = o.Host
+	s.Port = o.Port
+	return s, nil
 }
 
 // Server

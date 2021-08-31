@@ -31,14 +31,18 @@ type ServerOption struct {
 func NewOptions(v *viper.Viper) (*ServerOption, error) {
 	var (
 		err error
-		o   = new(ServerOption)
+		o   = new(options.ServerOption)
+		s   = new(ServerOption)
 	)
 
 	if err = v.UnmarshalKey("http", o); err != nil {
 		return nil, err
 	}
 
-	return o, err
+	s.Host = o.Host
+	s.Port = o.Port
+	s.Mode = o.Mode
+	return s, nil
 }
 
 // Server
