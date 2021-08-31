@@ -5,4 +5,4 @@ import (
 )
 
 // Provider
-var ProviderSet = wire.NewSet(NewServerOptions, NewServer, NewClientOptions, NewClient)
+var ProviderSet = wire.NewSet(NewOptions, NewServer, NewClientOptions, NewClient)

@@ -21,11 +21,16 @@ import (
 	"google.golang.org/grpc"
 )
 
-// NewServerOptions
-func NewServerOptions(v *viper.Viper) (*options.ServerOption, error) {
+// ServerOption
+type ServerOption struct {
+	options.ServerOption
+}
+
+// NewOptions
+func NewOptions(v *viper.Viper) (*ServerOption, error) {
 	var (
 		err error
-		o   = new(options.ServerOption)
+		o   = new(ServerOption)
 	)
 	if err = v.UnmarshalKey("grpc", o); err != nil {
 		return nil, err
@@ -37,7 +42,7 @@ func NewServerOptions(v *viper.Viper) (*options.ServerOption, error) {
 // Server
 type Server struct {
 	appName   string
-	option    *options.ServerOption
+	option    *ServerOption
 	logger    *zap.Logger
 	server    *grpc.Server
 	consulCli *consul.Client
@@ -47,7 +52,7 @@ type Server struct {
 type InitServers func(s *grpc.Server)
 
 // NewServer
-func NewServer(o *options.ServerOption, logger *zap.Logger, tracer opentracing.Tracer, init InitServers) (*Server, error) {
+func NewServer(o *ServerOption, logger *zap.Logger, tracer opentracing.Tracer, init InitServers) (*Server, error) {
 	// initialize grpc server
 	var gs *grpc.Server
 	logger = logger.With(zap.String("type", "grpc"))
