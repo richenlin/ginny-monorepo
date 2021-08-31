@@ -22,21 +22,16 @@ import (
 	"go.uber.org/zap"
 )
 
-// Server
-type Server struct {
-	appName   string
-	option    *options.ServerOption
-	logger    *zap.Logger
-	router    *gin.Engine
-	server    http.Server
-	consulCli *consul.Client
+// ServerOption
+type ServerOption struct {
+	options.ServerOption
 }
 
 // NewOptions
-func NewOptions(v *viper.Viper) (*options.ServerOption, error) {
+func NewOptions(v *viper.Viper) (*ServerOption, error) {
 	var (
 		err error
-		o   = new(options.ServerOption)
+		o   = new(ServerOption)
 	)
 
 	if err = v.UnmarshalKey("http", o); err != nil {
@@ -46,11 +41,21 @@ func NewOptions(v *viper.Viper) (*options.ServerOption, error) {
 	return o, err
 }
 
+// Server
+type Server struct {
+	appName   string
+	option    *ServerOption
+	logger    *zap.Logger
+	router    *gin.Engine
+	server    http.Server
+	consulCli *consul.Client
+}
+
 // InitHandlers
 type InitHandlers func(r *gin.Engine)
 
 // NewRouter
-func NewRouter(o *options.ServerOption, logger *zap.Logger, tracer opentracing.Tracer, init InitHandlers) *gin.Engine {
+func NewRouter(o *ServerOption, logger *zap.Logger, tracer opentracing.Tracer, init InitHandlers) *gin.Engine {
 	// 配置gin
 	gin.SetMode(o.Mode)
 	r := gin.New()
@@ -70,7 +75,7 @@ func NewRouter(o *options.ServerOption, logger *zap.Logger, tracer opentracing.T
 }
 
 // NewServer
-func NewServer(o *options.ServerOption, logger *zap.Logger, router *gin.Engine) (*Server, error) {
+func NewServer(o *ServerOption, logger *zap.Logger, router *gin.Engine) (*Server, error) {
 	var s = &Server{
 		logger: logger.With(zap.String("type", "http")),
 		router: router,
