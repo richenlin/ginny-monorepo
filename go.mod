@@ -7,6 +7,7 @@ require (
 	github.com/gin-contrib/zap v0.0.1
 	github.com/gin-gonic/gin v1.7.4
 	github.com/google/wire v0.5.0
+	github.com/gorillazer/ginny-consul v0.0.2
 	github.com/gorillazer/ginny-prometheus v0.0.1
 	github.com/gorillazer/ginny-util v0.0.1
 	github.com/grpc-ecosystem/go-grpc-middleware v1.3.0
