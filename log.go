@@ -56,7 +56,9 @@ func New(o *Options) (*zap.Logger, error) {
 
 	// file core 采用jsonEncoder
 	cores := make([]zapcore.Core, 0, 2)
-	je := zapcore.NewJSONEncoder(zap.NewProductionEncoderConfig())
+	config := zap.NewProductionEncoderConfig()
+	config.EncodeTime = zapcore.ISO8601TimeEncoder
+	je := zapcore.NewJSONEncoder(config)
 	cores = append(cores, zapcore.NewCore(je, fw, level))
 
 	// stdout core 采用 ConsoleEncoder
