@@ -37,6 +37,12 @@ func New(path string) (*viper.Viper, error) {
 	if err := loadConfig(v); err != nil {
 		return nil, err
 	}
+	// load config from remote
+	if v.GetString("config.provider") != "" {
+		if err := loadConfigFromRemote(v); err != nil {
+			return nil, err
+		}
+	}
 
 	return v, err
 }
@@ -52,6 +58,35 @@ func loadConfig(v *viper.Viper) error {
 	conf := expandEnv(string(data))
 	err = v.ReadConfig(bytes.NewReader([]byte(conf)))
 	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// RemoteProvider
+type RemoteProvider struct {
+	provider string
+	endpoint string
+	path     string
+	types    string
+}
+
+// loadConfigFromRemote
+func loadConfigFromRemote(v *viper.Viper) error {
+	p := new(RemoteProvider)
+	if err := v.UnmarshalKey("config", p); err != nil {
+		return err
+	}
+	if p.types == "" {
+		p.types = "json"
+	}
+	if err := v.AddRemoteProvider(p.provider, p.endpoint, p.path); err != nil {
+		return err
+	}
+	v.SetConfigType(p.types)
+
+	if err := v.ReadRemoteConfig(); err != nil {
 		return err
 	}
 	return nil
