@@ -210,8 +210,6 @@ github.com/googleapis/gax-go/v2 v2.0.4/go.mod h1:0Wqv26UfaUD9n4G6kQubkQ+KchISgw+
 github.com/googleapis/gax-go/v2 v2.0.5/go.mod h1:DWXyrwAJ9X0FpwwEdw+IPEYBICEFu5mhpdKc/us6bOk=
 github.com/gopherjs/gopherjs v0.0.0-20181017120253-0766667cb4d1 h1:EGx4pi6eqNxGaHF6qqu48+N2wcFQ5qg5FXgOdqsJ5d8=
 github.com/gopherjs/gopherjs v0.0.0-20181017120253-0766667cb4d1/go.mod h1:wJfORRmW1u3UXTncJ5qlYoELFm8eSnnEO6hX4iZ3EWY=
-github.com/gorillazer/ginny-consul v0.0.2 h1:gDux0ENvBsbtpMrZtcMwc2kZIp61HXi4+//xG4CsOsc=
-github.com/gorillazer/ginny-consul v0.0.2/go.mod h1:4jFz2MnhbOnHSqSHef4HgTKM0LOuPVT/5EmHeszCz+E=
 github.com/gorillazer/ginny-prometheus v0.0.1 h1:92S77jkU5Pv06k1jsD+FgSpmyYJUrVEtecunRQtvu0Y=
 github.com/gorillazer/ginny-prometheus v0.0.1/go.mod h1:4l1+0wBF3DDiW4FXdAiYpxbzaqv3E3yIHuZztVPHI/4=
 github.com/gorillazer/ginny-util v0.0.1 h1:lYNOLy9HSJD6v+76wT5bd+NX0fDJInsK0P7vOvLqsus=

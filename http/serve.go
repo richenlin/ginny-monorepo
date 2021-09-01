@@ -65,7 +65,7 @@ func NewRouter(o *ServerOption, logger *zap.Logger, tracer opentracing.Tracer, i
 	r := gin.New()
 	// panic之后自动恢复
 	r.Use(gin.Recovery())
-	r.Use(ginzap.Ginzap(logger, time.RFC3339, true))
+	r.Use(ginzap.Ginzap(logger, time.RFC3339, false))
 	r.Use(ginzap.RecoveryWithZap(logger, true))
 	r.Use(ginhttp.Middleware(tracer))
 	// 添加prometheus 监控
