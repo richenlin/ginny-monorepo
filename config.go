@@ -23,7 +23,7 @@ func New(path string) (*viper.Viper, error) {
 	)
 
 	v.AddConfigPath(defaultConfigPath)
-	v.SetConfigFile(string(path))
+	v.SetConfigFile(path)
 
 	v.AutomaticEnv()
 	v.SetEnvPrefix("ginny")
