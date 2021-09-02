@@ -11,8 +11,9 @@ import (
 	grpc_zap "github.com/grpc-ecosystem/go-grpc-middleware/logging/zap"
 	grpc_recovery "github.com/grpc-ecosystem/go-grpc-middleware/recovery"
 	grpc_ctxtags "github.com/grpc-ecosystem/go-grpc-middleware/tags"
+	grpc_validator "github.com/grpc-ecosystem/go-grpc-middleware/validator"
 	grpc_prometheus "github.com/grpc-ecosystem/go-grpc-prometheus"
-	"github.com/grpc-ecosystem/grpc-opentracing/go/otgrpc"
+	otgrpc "github.com/grpc-ecosystem/grpc-opentracing/go/otgrpc"
 	consulApi "github.com/hashicorp/consul/api"
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
@@ -64,18 +65,20 @@ func NewServer(o *ServerOption, logger *zap.Logger, tracer opentracing.Tracer, i
 		grpc_prometheus.EnableHandlingTimeHistogram()
 		gs = grpc.NewServer(
 			grpc.StreamInterceptor(grpc_middleware.ChainStreamServer(
-				grpc_ctxtags.StreamServerInterceptor(),
-				grpc_prometheus.StreamServerInterceptor,
-				grpc_zap.StreamServerInterceptor(logger),
 				grpc_recovery.StreamServerInterceptor(),
+				grpc_zap.StreamServerInterceptor(logger),
+				grpc_ctxtags.StreamServerInterceptor(),
 				otgrpc.OpenTracingStreamServerInterceptor(tracer),
+				grpc_prometheus.StreamServerInterceptor,
+				grpc_validator.StreamServerInterceptor(),
 			)),
 			grpc.UnaryInterceptor(grpc_middleware.ChainUnaryServer(
-				grpc_ctxtags.UnaryServerInterceptor(),
-				grpc_prometheus.UnaryServerInterceptor,
-				grpc_zap.UnaryServerInterceptor(logger),
 				grpc_recovery.UnaryServerInterceptor(),
+				grpc_zap.UnaryServerInterceptor(logger),
+				grpc_ctxtags.UnaryServerInterceptor(),
 				otgrpc.OpenTracingServerInterceptor(tracer),
+				grpc_prometheus.UnaryServerInterceptor,
+				grpc_validator.UnaryServerInterceptor(),
 			)),
 		)
 		init(gs)
