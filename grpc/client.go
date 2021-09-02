@@ -6,6 +6,7 @@ import (
 	"time"
 
 	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
+	grpc_retry "github.com/grpc-ecosystem/go-grpc-middleware/retry"
 	grpc_prometheus "github.com/grpc-ecosystem/go-grpc-prometheus"
 	"github.com/grpc-ecosystem/grpc-opentracing/go/otgrpc"
 	consulApi "github.com/hashicorp/consul/api"
@@ -14,6 +15,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/spf13/viper"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 )
 
 // ClientOptions
@@ -84,18 +86,27 @@ type Client struct {
 // NewClient
 func NewClient(o *ClientOptions, tracer opentracing.Tracer) (*Client, error) {
 	grpc_prometheus.EnableClientHandlingTimeHistogram()
-
+	// retry
+	retryOpts := []grpc_retry.CallOption{
+		grpc_retry.WithBackoff(grpc_retry.BackoffLinear(100 * time.Millisecond)),
+		grpc_retry.WithCodes(codes.NotFound, codes.Aborted),
+	}
 	o.grpcDialOptions = append(o.grpcDialOptions,
 		grpc.WithInsecure(),
 		grpc.WithUnaryInterceptor(grpc_middleware.ChainUnaryClient(
 			grpc_prometheus.UnaryClientInterceptor,
-			otgrpc.OpenTracingClientInterceptor(tracer)),
+			otgrpc.OpenTracingClientInterceptor(tracer),
+			grpc_retry.UnaryClientInterceptor(retryOpts...),
+		),
 		),
 		grpc.WithStreamInterceptor(grpc_middleware.ChainStreamClient(
 			grpc_prometheus.StreamClientInterceptor,
-			otgrpc.OpenTracingStreamClientInterceptor(tracer)),
+			otgrpc.OpenTracingStreamClientInterceptor(tracer),
+			grpc_retry.StreamClientInterceptor(retryOpts...),
+		),
 		),
 	)
+
 	return &Client{
 		options: o,
 	}, nil
@@ -123,6 +134,7 @@ func (c *Client) Dial(service string, options ...ClientOptional) (*grpc.ClientCo
 	if o.consulOptions != nil && o.consulOptions.Address != "" {
 		o.Target = fmt.Sprintf("consul://%s/%s?wait=%s&tag=%s", o.consulOptions.Address, service, o.Wait, o.Tag)
 	}
+
 	conn, err := grpc.DialContext(ctx, o.Target, o.grpcDialOptions...)
 	if err != nil {
 		return nil, errors.Wrap(err, "grpc dial error")
