@@ -116,10 +116,12 @@ func (s *Server) Start(opts ...options.ServerOptional) error {
 
 	if o.Port == 0 {
 		o.Port = util.GetAvailablePort()
+		s.option.Port = o.Port
 	}
 	//
 	if o.Host == "" {
 		o.Host = util.GetLocalIP4()
+		s.option.Host = o.Host
 		// return errors.New("get local ipv4 error")
 	}
 
