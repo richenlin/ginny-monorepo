@@ -1,4 +1,4 @@
-package http
+package client
 
 import (
 	"bytes"
@@ -10,17 +10,18 @@ import (
 	"net"
 	"net/http"
 	"net/url"
-	"sync"
 	"time"
 
+	"github.com/google/wire"
+	consulApi "github.com/hashicorp/consul/api"
 	"github.com/opentracing/opentracing-go"
 	"github.com/opentracing/opentracing-go/ext"
 	"github.com/spf13/viper"
 )
 
 var (
-	httpPool *http.Client
-	poolOnce sync.Once
+	httpPool           *http.Client
+	HttpClientProvider = wire.NewSet(NewClientOptions, NewClient)
 )
 
 const (
@@ -40,6 +41,7 @@ type ClientOptions struct {
 	readTimeout    time.Duration
 	writeTimeout   time.Duration
 	retryTimes     int
+	consulOptions  *consulApi.Config
 }
 
 // NewClientOptions
@@ -54,23 +56,28 @@ func NewClientOptions(v *viper.Viper) (*ClientOptions, error) {
 	return o, nil
 }
 
-func httpClient(o *ClientOptions) *http.Client {
+func httpClient(o *ClientOptions) (*http.Client, error) {
+	transport := &http.Transport{
+		DialContext: (&net.Dialer{
+			Timeout:   (time.Duration(o.connectTimeout)) * time.Second,
+			KeepAlive: 30 * time.Second,
+			DualStack: true,
+		}).DialContext,
+		MaxIdleConns:          100,
+		IdleConnTimeout:       90 * time.Second,
+		MaxIdleConnsPerHost:   100, //默认是2
+		ResponseHeaderTimeout: time.Duration(o.readTimeout) * time.Second,
+		ExpectContinueTimeout: time.Duration(o.writeTimeout) * time.Second,
+	}
+	if o.consulOptions != nil {
+		return consulApi.NewHttpClient(transport, o.consulOptions.TLSConfig)
+	}
+
 	to := o.connectTimeout + o.readTimeout + o.writeTimeout
 	return &http.Client{
-		Transport: &http.Transport{
-			DialContext: (&net.Dialer{
-				Timeout:   (time.Duration(o.connectTimeout)) * time.Second,
-				KeepAlive: 30 * time.Second,
-				DualStack: true,
-			}).DialContext,
-			MaxIdleConns:          100,
-			IdleConnTimeout:       90 * time.Second,
-			MaxIdleConnsPerHost:   100, //默认是2
-			ResponseHeaderTimeout: time.Duration(o.readTimeout) * time.Second,
-			ExpectContinueTimeout: time.Duration(o.writeTimeout) * time.Second,
-		},
-		Timeout: time.Duration(to) * time.Second, //默认是0，无超时
-	}
+		Transport: transport,
+		Timeout:   time.Duration(to) * time.Second, //默认是0，无超时
+	}, nil
 }
 
 // ClientOptional
@@ -104,6 +111,13 @@ func WithRetryTimes(retryTimes int) ClientOptional {
 	}
 }
 
+// WithConsulConfig
+func WithConsulConfig(consul *consulApi.Config) ClientOptional {
+	return func(opt *ClientOptions) {
+		opt.consulOptions = consul
+	}
+}
+
 // Client
 type Client struct {
 	client  *http.Client
@@ -112,43 +126,53 @@ type Client struct {
 }
 
 // NewClient
-func NewClient(o *ClientOptions, tracer opentracing.Tracer) (*Client, error) {
-	poolOnce.Do(func() {
-		httpPool = httpClient(o)
-	})
-	return &Client{
+func NewClient(o *ClientOptions, tracer opentracing.Tracer) (cli *Client, err error) {
+	if httpPool == nil {
+		httpPool, err = httpClient(o)
+		if err != nil {
+			return
+		}
+	}
+	cli = &Client{
 		client:  httpPool,
 		options: o,
 		tracer:  tracer,
-	}, nil
+	}
+	return
 }
 
 // Get
-func (c *Client) Get(ctx context.Context, uri string, form url.Values, header map[string]string, options ...ClientOptional) (body []byte, err error) {
+func (c *Client) Get(ctx context.Context, uri string,
+	form url.Values, header map[string]string, options ...ClientOptional) (body []byte, err error) {
 	o := parseOptions(options...)
 	return c.withoutBody(ctx, http.MethodGet, uri, form, header, o)
 }
 
 // Delete
-func (c *Client) Delete(ctx context.Context, uri string, form url.Values, header map[string]string, options ...ClientOptional) (body []byte, err error) {
+func (c *Client) Delete(ctx context.Context, uri string,
+	form url.Values, header map[string]string, options ...ClientOptional) (body []byte, err error) {
 	o := parseOptions(options...)
 	return c.withoutBody(ctx, http.MethodDelete, uri, form, header, o)
 }
 
-func (c *Client) Post(ctx context.Context, uri string, bodyData interface{}, header map[string]string, options ...ClientOptional) (body []byte, err error) {
+func (c *Client) Post(ctx context.Context, uri string,
+	bodyData interface{}, header map[string]string, options ...ClientOptional) (body []byte, err error) {
 	o := parseOptions(options...)
 	return c.withBody(ctx, http.MethodPost, uri, bodyData, header, o)
 }
-func (c *Client) Put(ctx context.Context, uri string, bodyData interface{}, header map[string]string, options ...ClientOptional) (body []byte, err error) {
+func (c *Client) Put(ctx context.Context, uri string,
+	bodyData interface{}, header map[string]string, options ...ClientOptional) (body []byte, err error) {
 	o := parseOptions(options...)
 	return c.withBody(ctx, http.MethodPut, uri, bodyData, header, o)
 }
-func (c *Client) Patch(ctx context.Context, uri string, bodyData interface{}, header map[string]string, options ...ClientOptional) (body []byte, err error) {
+func (c *Client) Patch(ctx context.Context, uri string,
+	bodyData interface{}, header map[string]string, options ...ClientOptional) (body []byte, err error) {
 	o := parseOptions(options...)
 	return c.withBody(ctx, http.MethodPatch, uri, bodyData, header, o)
 }
 
-func (c *Client) withoutBody(ctx context.Context, method, uri string, form url.Values, header map[string]string, options *ClientOptions) (body []byte, err error) {
+func (c *Client) withoutBody(ctx context.Context, method, uri string,
+	form url.Values, header map[string]string, options *ClientOptions) (body []byte, err error) {
 	if uri == "" {
 		return nil, errors.New("uri required")
 	}
@@ -254,7 +278,7 @@ func parseTrace(ctx context.Context, method, tag string, tracer opentracing.Trac
 		method,
 		opentracing.ChildOf(parentCtx),
 		ext.SpanKindRPCClient,
-		opentracing.Tag{string(ext.Component), tag},
+		opentracing.Tag{Key: string(ext.Component), Value: tag},
 	)
 	return clientSpan
 }
