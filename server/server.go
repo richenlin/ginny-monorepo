@@ -11,7 +11,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/google/wire"
 	"github.com/gorillazer/ginny-serve/health"
 	"github.com/gorillazer/ginny-serve/mux"
 	"github.com/gorillazer/ginny-util/graceful"
@@ -22,8 +21,6 @@ import (
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 )
-
-var GrpcServerProvider = wire.NewSet(NewServer)
 
 // Server the grpc server
 type Server struct {
@@ -93,8 +90,6 @@ func (s *Server) startGRPC() error {
 	if err != nil {
 		return errors.New("Start grpc failed for " + err.Error())
 	}
-	// register to consul
-	s.register()
 	return nil
 }
 
@@ -112,6 +107,19 @@ func (s *Server) startHTTP() error {
 		return errors.New("Start http failed for " + err.Error())
 	}
 	return nil
+}
+
+// RegisterService 注册函数
+func (s *Server) RegisterService(desc *grpc.ServiceDesc, serviceImpl interface{}) {
+	s.grpcServer.RegisterService(desc, serviceImpl)
+	// auto bind http handler
+	if s.options.autoHttp {
+		for _, v := range desc.Methods {
+			path := "/" + desc.ServiceName + "/" + v.MethodName
+			s.logger.With("path", path).Log(logging.DEBUG, "handled")
+			s.mux.Handle(http.MethodPost, path, mux.HandlerGRPCService(s.mux.ServeMux(), serviceImpl, v))
+		}
+	}
 }
 
 // Close

@@ -5,23 +5,25 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"net"
 	"net/http"
 	"net/url"
+	"reflect"
+	"strings"
 	"time"
 
-	"github.com/google/wire"
 	consulApi "github.com/hashicorp/consul/api"
 	"github.com/opentracing/opentracing-go"
 	"github.com/opentracing/opentracing-go/ext"
-	"github.com/spf13/viper"
-)
-
-var (
-	httpPool           *http.Client
-	HttpClientProvider = wire.NewSet(NewClientOptions, NewClient)
+	"go.uber.org/zap"
+	"golang.org/x/net/context/ctxhttp"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/proto"
 )
 
 const (
@@ -33,51 +35,22 @@ const (
 	DefaultRetryTimes = 3
 	// DefaultRetryDelay 在重试前，延迟等待100毫秒
 	DefaultRetryDelay = time.Millisecond * 100
+	RequestIDHeader   = "X-Request-Id"
 )
 
 // ClientOptions
 type ClientOptions struct {
-	connectTimeout time.Duration
-	readTimeout    time.Duration
-	writeTimeout   time.Duration
-	retryTimes     int
-	consulOptions  *consulApi.Config
-}
-
-// NewClientOptions
-func NewClientOptions(v *viper.Viper) (*ClientOptions, error) {
-	var (
-		err error
-		o   = new(ClientOptions)
-	)
-	if err = v.UnmarshalKey("http.client", o); err != nil {
-		return nil, err
-	}
-	return o, nil
-}
-
-func httpClient(o *ClientOptions) (*http.Client, error) {
-	transport := &http.Transport{
-		DialContext: (&net.Dialer{
-			Timeout:   (time.Duration(o.connectTimeout)) * time.Second,
-			KeepAlive: 30 * time.Second,
-			DualStack: true,
-		}).DialContext,
-		MaxIdleConns:          100,
-		IdleConnTimeout:       90 * time.Second,
-		MaxIdleConnsPerHost:   100, //默认是2
-		ResponseHeaderTimeout: time.Duration(o.readTimeout) * time.Second,
-		ExpectContinueTimeout: time.Duration(o.writeTimeout) * time.Second,
-	}
-	if o.consulOptions != nil {
-		return consulApi.NewHttpClient(transport, o.consulOptions.TLSConfig)
-	}
-
-	to := o.connectTimeout + o.readTimeout + o.writeTimeout
-	return &http.Client{
-		Transport: transport,
-		Timeout:   time.Duration(to) * time.Second, //默认是0，无超时
-	}, nil
+	target                string // "consul://xxx" or ip+port/path
+	logger                *zap.Logger
+	tracer                opentracing.Tracer
+	resolver              Resolver
+	connectTimeout        time.Duration
+	readTimeout           time.Duration
+	writeTimeout          time.Duration
+	retryTimes            int
+	consulOptions         *consulApi.Config
+	protoJSONMarshaller   *protojson.MarshalOptions
+	protoJSONUnmarshaller *protojson.UnmarshalOptions
 }
 
 // ClientOptional
@@ -118,162 +91,241 @@ func WithConsulConfig(consul *consulApi.Config) ClientOptional {
 	}
 }
 
+// WithLogger
+func WithLogger(logger *zap.Logger) ClientOptional {
+	return func(o *ClientOptions) {
+		o.logger = logger
+	}
+}
+
+// WithTracer
+func WithTracer(tracer opentracing.Tracer) ClientOptional {
+	return func(o *ClientOptions) {
+		o.tracer = tracer
+	}
+}
+
+// WithResolver
+func WithResolver(resolver Resolver) ClientOptional {
+	return func(o *ClientOptions) {
+		o.resolver = resolver
+	}
+}
+
 // Client
 type Client struct {
 	client  *http.Client
 	options *ClientOptions
-	tracer  opentracing.Tracer
 }
 
 // NewClient
-func NewClient(o *ClientOptions, tracer opentracing.Tracer) (cli *Client, err error) {
-	if httpPool == nil {
-		httpPool, err = httpClient(o)
-		if err != nil {
-			return
+func NewClient(ctx context.Context, uri string, opts ...ClientOptional) (*Client, error) {
+	u, err := url.Parse(uri)
+	if err != nil {
+		return nil, fmt.Errorf("parse uri %s error for %w", uri, err)
+	}
+	opt, err := parseOptions(ctx, u, opts...)
+	if err != nil {
+		return nil, err
+	}
+
+	cli, err := newClientConn(ctx, opt)
+	if err != nil {
+		return nil, err
+	}
+	return &Client{
+		client:  cli,
+		options: opt,
+	}, nil
+
+}
+
+// newClientConn
+func newClientConn(ctx context.Context, o *ClientOptions) (*http.Client, error) {
+	transport := &http.Transport{
+		DialContext: (&net.Dialer{
+			Timeout:   (time.Duration(o.connectTimeout)) * time.Second,
+			KeepAlive: 30 * time.Second,
+			DualStack: true,
+		}).DialContext,
+		MaxIdleConns:          100,
+		IdleConnTimeout:       90 * time.Second,
+		MaxIdleConnsPerHost:   100, //默认是2
+		ResponseHeaderTimeout: time.Duration(o.readTimeout) * time.Second,
+		ExpectContinueTimeout: time.Duration(o.writeTimeout) * time.Second,
+	}
+	if o.consulOptions != nil {
+		return consulApi.NewHttpClient(transport, o.consulOptions.TLSConfig)
+	}
+
+	to := o.connectTimeout + o.readTimeout + o.writeTimeout
+	return &http.Client{
+		Transport: transport,
+		Timeout:   time.Duration(to) * time.Second, //默认是0，无超时
+	}, nil
+}
+
+// Request 自动序列化和反序列化地请求
+// 请求 和 响应 支持 struct 和 string 和 []byte 三种方式
+func (c *Client) Request(ctx context.Context, method,
+	path string, header http.Header, reqData interface{},
+	respDataPtr interface{},
+) (err error) {
+	start := time.Now()
+	if header == nil {
+		header = http.Header{}
+	}
+	var httpRequestURL string
+	if strings.HasPrefix(path, "/") {
+		httpRequestURL = c.options.target + path
+	}
+	if strings.HasPrefix(path, "https://") || strings.HasPrefix(path, "http://") {
+		httpRequestURL = path
+	}
+
+	if c.options.tracer != nil {
+		clientSpan := parseTrace(ctx, method, "httpClient-"+method, c.options.tracer)
+		carrier := opentracing.HTTPHeadersCarrier(header)
+		_ = c.options.tracer.Inject(clientSpan.Context(), opentracing.HTTPHeaders, carrier)
+		header = http.Header(carrier)
+		defer clientSpan.Finish()
+	}
+
+	var (
+		tryTimes int
+		reqBody  []byte
+		resp     *http.Response
+	)
+	defer func() {
+		c.onRequestClose(ctx, method, httpRequestURL, tryTimes, start, header, resp.StatusCode, err)
+	}()
+
+	reqBody, err = c.buildRequestBody(ctx, header, reqData)
+	for i := 0; i <= c.options.retryTimes; i++ {
+		resp, err = c.request(ctx, method,
+			httpRequestURL, header, reqBody)
+		tryTimes++
+		if err == nil {
+			break
+		}
+		if resp != nil {
+			resp.Body.Close()
 		}
 	}
-	cli = &Client{
-		client:  httpPool,
-		options: o,
-		tracer:  tracer,
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	err = c.parseResponseBody(ctx, resp.Body, respDataPtr)
+	if err != nil {
+		return
+	}
+
+	if resp.StatusCode >= http.StatusOK && resp.StatusCode < http.StatusMultipleChoices {
+		return status.Error(codes.Code(resp.StatusCode), "http status code is not 200")
+	}
+	return nil
+}
+
+func (c *Client) request(ctx context.Context, method, uri string,
+	header http.Header, reqBody []byte,
+) (*http.Response, error) {
+	var (
+		err     error
+		request *http.Request
+	)
+
+	if len(reqBody) > 0 {
+		request, err = http.NewRequest(method, uri, bytes.NewReader(reqBody))
+	} else {
+		request, err = http.NewRequest(method, uri, nil)
+	}
+	if err != nil {
+		return nil, err
+	}
+	request.Header = header
+	return ctxhttp.Do(ctx, c.client, request)
+}
+
+func (c *Client) onRequestClose(ctx context.Context,
+	method, path string, tryTimes int, start time.Time,
+	header http.Header, statusCode int, err error,
+) {
+	if c.options.logger != nil {
+		used := time.Since(start)
+		log := c.options.logger.With(
+			zap.String("action", method+":"+path),
+			zap.String("host", c.options.target),
+			zap.String("request_id", header.Get(RequestIDHeader)),
+			zap.Int("status", statusCode),
+			zap.Int("referer", tryTimes),
+			zap.String("protocol", "http/client"),
+			zap.Float32("time_ms", durationToMilliseconds(used)),
+		)
+		if err != nil {
+			log.Error(err.Error())
+		} else {
+			log.Info(method)
+		}
+	}
+}
+
+// buildRequestBody
+func (c *Client) buildRequestBody(ctx context.Context,
+	header http.Header, reqData interface{}) (reqBody []byte, err error) {
+	if reqData == nil {
+		return
+	}
+	switch v := reqData.(type) {
+	case []byte:
+		reqBody = v
+	case string:
+		reqBody = []byte(v)
+	default:
+		if protoData, ok := reqData.(proto.Message); ok {
+			reqBody, err = c.options.protoJSONMarshaller.Marshal(protoData)
+		} else {
+			reqBody, err = json.Marshal(reqData)
+		}
+		if err == nil {
+			header.Set("Content-Type", "application/json")
+		}
 	}
 	return
 }
 
-// Get
-func (c *Client) Get(ctx context.Context, uri string,
-	form url.Values, header map[string]string, options ...ClientOptional) (body []byte, err error) {
-	o := parseOptions(options...)
-	return c.withoutBody(ctx, http.MethodGet, uri, form, header, o)
-}
-
-// Delete
-func (c *Client) Delete(ctx context.Context, uri string,
-	form url.Values, header map[string]string, options ...ClientOptional) (body []byte, err error) {
-	o := parseOptions(options...)
-	return c.withoutBody(ctx, http.MethodDelete, uri, form, header, o)
-}
-
-func (c *Client) Post(ctx context.Context, uri string,
-	bodyData interface{}, header map[string]string, options ...ClientOptional) (body []byte, err error) {
-	o := parseOptions(options...)
-	return c.withBody(ctx, http.MethodPost, uri, bodyData, header, o)
-}
-func (c *Client) Put(ctx context.Context, uri string,
-	bodyData interface{}, header map[string]string, options ...ClientOptional) (body []byte, err error) {
-	o := parseOptions(options...)
-	return c.withBody(ctx, http.MethodPut, uri, bodyData, header, o)
-}
-func (c *Client) Patch(ctx context.Context, uri string,
-	bodyData interface{}, header map[string]string, options ...ClientOptional) (body []byte, err error) {
-	o := parseOptions(options...)
-	return c.withBody(ctx, http.MethodPatch, uri, bodyData, header, o)
-}
-
-func (c *Client) withoutBody(ctx context.Context, method, uri string,
-	form url.Values, header map[string]string, options *ClientOptions) (body []byte, err error) {
-	if uri == "" {
-		return nil, errors.New("uri required")
-	}
-
-	if len(form) > 0 {
-		if uri, err = buildQuery(uri, form); err != nil {
-			return nil, err
-		}
-	}
-
-	clientSpan := parseTrace(ctx, method, "httpClient-"+method, c.tracer)
-	defer clientSpan.Finish()
-
-	if header["Content-Type"] == "" {
-		header["Content-Type"] = "application/x-www-form-urlencoded; charset=utf-8"
-	}
-
-	return c.request(ctx, method, uri, nil, header)
-}
-
-func (c *Client) withBody(ctx context.Context, method, uri string, bodyData interface{}, header map[string]string, options *ClientOptions) (body []byte, err error) {
-	if uri == "" {
-		return nil, errors.New("uri required")
-	}
-
-	clientSpan := parseTrace(ctx, method, "httpClient-"+method, c.tracer)
-	defer clientSpan.Finish()
-
-	if header["Content-Type"] == "" {
-		header["Content-Type"] = "application/json; charset=utf-8"
-	}
-
-	return c.request(ctx, method, uri, bodyData, header)
-}
-
-func (c *Client) request(ctx context.Context, method, uri string, bodyData interface{},
-	header map[string]string) ([]byte, error) {
-	var body io.Reader
-	if bodyData != nil {
-		bodyRaw, err := json.Marshal(bodyData)
-		if err != nil {
-			return nil, err
-		}
-		body = bytes.NewReader(bodyRaw)
-	}
-
-	req, err := http.NewRequestWithContext(ctx, method, uri, body)
-	if err != nil {
-		return nil, err
-	}
-	for k, v := range header {
-		req.Header.Set(k, v)
-	}
-
-	// 重试body定义
-	var (
-		retryBody io.ReadCloser
-		retryFlag = false
-		retryErr  error
-		resp      *http.Response
-	)
-
-	for i := 0; i < c.options.retryTimes; i++ {
-		// 赋值重试body 执行请求会读取buffer 导致body为空
-		if req.Method == http.MethodPost {
-			retryBody, _ = req.GetBody()
-			if retryFlag {
-				req.Body = retryBody
+// parseResponseBody
+func (c *Client) parseResponseBody(ctx context.Context,
+	body io.ReadCloser, respDataPtr interface{}) (err error) {
+	respBody, err := ioutil.ReadAll(body)
+	if respDataPtr != nil {
+		switch v := respDataPtr.(type) {
+		case *string:
+			*v = string(respBody)
+		default:
+			if _, ok := respDataPtr.(proto.Message); ok {
+				err = c.options.protoJSONUnmarshaller.Unmarshal(respBody,
+					respDataPtr.(proto.Message))
+			} else {
+				err = json.Unmarshal(respBody, respDataPtr)
+			}
+			if err != nil {
+				err = fmt.Errorf(" can not unmarshal %s to %s for %w ",
+					string(respBody), reflect.TypeOf(respDataPtr), err)
 			}
 		}
-		resp, retryErr = c.client.Do(req)
-		if retryErr != nil {
-			retryFlag = true
-		} else if resp.StatusCode == http.StatusOK {
-			// retryFlag = false
-			break
-		} else {
-			// 如果状态码不为200，报错并继续重试
-			retryFlag = true
-		}
 	}
-
-	if retryErr != nil {
-		return nil, err
-	}
-	if resp.Body != nil {
-		defer resp.Body.Close()
-	}
-
-	bin, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
-	return bin, nil
+	return
 }
 
+// parseTrace
 func parseTrace(ctx context.Context, method, tag string, tracer opentracing.Tracer) opentracing.Span {
 	var parentCtx opentracing.SpanContext
 	if parent := opentracing.SpanFromContext(ctx); parent != nil {
 		parentCtx = parent.Context()
 	}
+
 	clientSpan := tracer.StartSpan(
 		method,
 		opentracing.ChildOf(parentCtx),
@@ -283,19 +335,43 @@ func parseTrace(ctx context.Context, method, tag string, tracer opentracing.Trac
 	return clientSpan
 }
 
-func parseOptions(options ...ClientOptional) *ClientOptions {
+// parseOptions
+func parseOptions(ctx context.Context, u *url.URL, options ...ClientOptional) (*ClientOptions, error) {
 	o := &ClientOptions{
 		connectTimeout: DefaultConnectTimeout,
 		readTimeout:    DefaultReadTimeout,
 		writeTimeout:   DefaultWriteTimeout,
 		retryTimes:     DefaultRetryTimes,
+		protoJSONMarshaller: &protojson.MarshalOptions{
+			UseProtoNames: true,
+		},
+		protoJSONUnmarshaller: &protojson.UnmarshalOptions{
+			DiscardUnknown: true,
+		},
 	}
+
 	for _, option := range options {
 		option(o)
 	}
-	return o
+	query := u.Query()
+	if query.Get("emitUnpopulated") == "true" {
+		o.protoJSONMarshaller.EmitUnpopulated = true
+	}
+	if u.Scheme == "http" || u.Scheme == "https" {
+		o.target = u.String()
+	}
+	if o.resolver != nil {
+		addr, err := o.resolver(ctx, u.String())
+		if err != nil {
+			return nil, err
+		}
+		o.target = addr
+	}
+
+	return o, nil
 }
 
+// buildQuery
 func buildQuery(uri string, form url.Values) (string, error) {
 	if len(form) == 0 {
 		return "", errors.New("form required")
@@ -313,4 +389,10 @@ func buildQuery(uri string, form url.Values) (string, error) {
 
 	target.RawQuery = urlValues.Encode()
 	return target.String(), nil
+}
+
+// durationToMilliseconds
+func durationToMilliseconds(duration time.Duration) float32 {
+	milliseconds := float32(duration.Nanoseconds()/1000) / 1000
+	return milliseconds
 }

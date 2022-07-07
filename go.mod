@@ -4,7 +4,6 @@ go 1.16
 
 require (
 	github.com/google/uuid v1.1.2
-	github.com/google/wire v0.5.0
 	github.com/gorillazer/ginny-util v0.0.6
 	github.com/gorillazer/ginny-util/graceful v0.0.0-20220701090559-95adaf70d7de
 	github.com/grpc-ecosystem/go-grpc-middleware/providers/zap/v2 v2.0.0-20210710102418-709d4153d7aa
@@ -15,9 +14,8 @@ require (
 	github.com/mbobakov/grpc-consul-resolver v1.4.4
 	github.com/opentracing/opentracing-go v1.2.0
 	github.com/pkg/errors v0.9.1
-	github.com/prometheus/client_golang v1.12.2 // indirect
-	github.com/spf13/viper v1.12.0
 	go.uber.org/zap v1.21.0
+	golang.org/x/net v0.0.0-20220520000938-2e3eb7b945c2
 	google.golang.org/genproto v0.0.0-20220519153652-3a47de7e79bd
 	google.golang.org/grpc v1.46.2
 	google.golang.org/protobuf v1.28.0
