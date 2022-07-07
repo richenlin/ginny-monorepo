@@ -45,8 +45,9 @@ var (
 	}
 
 	defaultOptions = &MuxOption{
-		bodyMarshaler:  defaultMarshaler,
-		errorMarshaler: defaultMarshaler,
+		bodyMarshaler:     defaultMarshaler,
+		errorMarshaler:    defaultMarshaler,
+		withoutHTTPStatus: true,
 	}
 )
 
