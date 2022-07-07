@@ -56,35 +56,45 @@ type Optional func(*MuxOption)
 // WithErrorHandler
 func WithErrorHandler(fn runtime.ErrorHandlerFunc) Optional {
 	return func(o *MuxOption) {
-		o.errorHandler = fn
+		if fn != nil {
+			o.errorHandler = fn
+		}
 	}
 }
 
 // WithBodyWriter
 func WithBodyWriter(b bodyReWriterFunc) Optional {
 	return func(o *MuxOption) {
-		o.bodyWriter = b
+		if b != nil {
+			o.bodyWriter = b
+		}
 	}
 }
 
 // WithBodyMarshaler
 func WithBodyMarshaler(ms runtime.Marshaler) Optional {
 	return func(o *MuxOption) {
-		o.bodyMarshaler = ms
+		if ms != nil {
+			o.bodyMarshaler = ms
+		}
 	}
 }
 
 // WithErrorMarshaler
 func WithErrorMarshaler(ms runtime.Marshaler) Optional {
 	return func(o *MuxOption) {
-		o.errorMarshaler = ms
+		if ms != nil {
+			o.errorMarshaler = ms
+		}
 	}
 }
 
 // WithRunTimeOpts with runtime MuxOption
 func WithRunTimeOpts(opts runtime.ServeMuxOption) Optional {
 	return func(o *MuxOption) {
-		o.runTimeOpts = append(o.runTimeOpts, opts)
+		if opts != nil {
+			o.runTimeOpts = append(o.runTimeOpts, opts)
+		}
 	}
 }
 
@@ -98,7 +108,9 @@ func WithoutHTTPStatus() Optional {
 // WithMiddleWares pluggable function that performs middle wares.
 func WithMiddleWares(middleWares ...func(http.Handler) http.Handler) Optional {
 	return func(o *MuxOption) {
-		o.middleWares = middleWares
+		if len(middleWares) > 0 {
+			o.middleWares = append(o.middleWares, middleWares...)
+		}
 	}
 }
 

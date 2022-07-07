@@ -61,35 +61,45 @@ func evaluateOptions(opts []Option) *options {
 // WithLogger
 func WithLogger(logger grpc_logging.Logger) Option {
 	return func(o *options) {
-		o.logger = logger
+		if logger != nil {
+			o.logger = logger
+		}
 	}
 }
 
 // WithGrpcAddr
 func WithGrpcAddr(addr string) Option {
 	return func(o *options) {
-		o.grpcAddr = addr
+		if addr != "" {
+			o.grpcAddr = addr
+		}
 	}
 }
 
 // WithHttpAddr
 func WithHttpAddr(addr string) Option {
 	return func(o *options) {
-		o.httpAddr = addr
+		if addr != "" {
+			o.httpAddr = addr
+		}
 	}
 }
 
 // WithConsul
 func WithConsul(consul *consulApi.Client) Option {
 	return func(o *options) {
-		o.consul = consul
+		if consul != nil {
+			o.consul = consul
+		}
 	}
 }
 
 // WithTracer
 func WithTracer(tracer opentracing.Tracer) Option {
 	return func(o *options) {
-		o.tracer = tracer
+		if tracer != nil {
+			o.tracer = tracer
+		}
 	}
 }
 
@@ -103,21 +113,27 @@ func WithHttp(h bool) Option {
 // WithLoggingDecider
 func WithLoggingDecider(decider logging.Decider) Option {
 	return func(o *options) {
-		o.loggingDecider = decider
+		if decider != nil {
+			o.loggingDecider = decider
+		}
 	}
 }
 
 // WithStreamServerInterceptor
 func WithStreamServerInterceptor(f grpc.StreamServerInterceptor) Option {
 	return func(o *options) {
-		o.streamServerInterceptors = append(o.streamServerInterceptors, f)
+		if f != nil {
+			o.streamServerInterceptors = append(o.streamServerInterceptors, f)
+		}
 	}
 }
 
 // WithUnaryServerInterceptor
 func WithUnaryServerInterceptor(f grpc.UnaryServerInterceptor) Option {
 	return func(o *options) {
-		o.unaryServerInterceptors = append(o.unaryServerInterceptors, f)
+		if f != nil {
+			o.unaryServerInterceptors = append(o.unaryServerInterceptors, f)
+		}
 	}
 }
 
@@ -125,7 +141,9 @@ func WithUnaryServerInterceptor(f grpc.UnaryServerInterceptor) Option {
 // unary and server-streamed methods only.
 func WithRequestFieldExtractor(f logging.RequestFieldExtractorFunc) Option {
 	return func(o *options) {
-		o.requestFieldExtractorFunc = f
+		if f != nil {
+			o.requestFieldExtractorFunc = f
+		}
 	}
 }
 
@@ -133,21 +151,27 @@ func WithRequestFieldExtractor(f logging.RequestFieldExtractorFunc) Option {
 // unary and server-streamed methods only.
 func WithResponseFieldExtractor(f logging.ResponseFieldExtractorFunc) Option {
 	return func(o *options) {
-		o.responseFieldExtractorFunc = f
+		if f != nil {
+			o.responseFieldExtractorFunc = f
+		}
 	}
 }
 
 // WithGRPCServerOption with other grpc options
 func WithGrpcServerOption(opts ...grpc.ServerOption) Option {
 	return func(o *options) {
-		o.grpcServerOpts = opts
+		if len(opts) > 0 {
+			o.grpcServerOpts = append(o.grpcServerOpts, opts...)
+		}
 	}
 }
 
 // WithHTTPServerOption with http server options
 func WithHttpServerOption(opts ...mux.Optional) Option {
 	return func(o *options) {
-		o.muxOptions = opts
+		if len(opts) > 0 {
+			o.muxOptions = append(o.muxOptions, opts...)
+		}
 	}
 }
 
