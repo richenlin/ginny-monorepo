@@ -1,0 +1,32 @@
+syntax = "proto3";
+
+package pb;
+
+option go_package = "github.com/goriller/ginny-demo/api/proto;pb";
+
+import "github.com/envoyproxy/protoc-gen-validate/validate/validate.proto";
+import "google/api/annotations.proto";
+
+// 测试Say服务
+service Say {
+
+  // 测试HelloWorld
+  rpc Hello(Request) returns (Response) {
+    option (google.api.http) = {
+      post : "/hello"
+      body : "*"
+    };
+  }
+}
+
+// Hello 请求
+message Request {
+  // 姓名
+  string name = 1 [ (validate.rules).string = {len : 32} ];
+}
+
+// Hello 响应
+message Response {
+  // 回复消息
+  string msg = 1;
+}

@@ -1,0 +1,32 @@
+{
+    // 使用 IntelliSense 了解相关属性。 
+    // 悬停以查看现有属性的描述。
+    // 欲了解更多信息，请访问: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Launch Package",
+            "type": "go",
+            "request": "launch",
+            "mode": "auto",
+            "program": "${workspaceFolder}/cmd",
+            "env": {
+                "redis_host": "127.0.0.1:6379",
+                "redis_db": "0",
+                "redis_pass": "",
+                "mongo_default_db": "default_dbname",
+                "mongo_host": "127.0.0.1:27017",
+                "mongo_username": "xxxx",
+                "mongo_password": "xxxx",
+                "consul_addr": "127.0.0.1:8500",
+                "jaeger-agent": "127.0.0.1:6831",
+                "broker_dsn": "kafka://127.0.0.1:9011",
+                "mysql_dsn": "mysql://127.0.0.1:3306/test?username=&password=&charset=utf8mb4&parseTime=true&loc=Local&multiStatements=true",
+            },
+            "args": [
+                "-conf",
+                "../configs/config.yml"
+            ]
+        }
+    ]
+}

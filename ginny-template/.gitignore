@@ -1,0 +1,4 @@
+*.log
+.ginny
+.ginny.yml
+__debug_bin
