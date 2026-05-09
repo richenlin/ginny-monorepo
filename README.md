@@ -32,6 +32,11 @@ Ginny 框架及生态组件 v2 统一管理。
 
 | 组件 | 替代方案 |
 |------|---------|
+| ~~ginny-config~~ | `ginny/config/` (koanf) |
+| ~~ginny-log~~ | `log/slog` + `ginny/log/` |
+| ~~ginny-jaeger~~ | `ginny/interceptor/tracing/` (OTel) |
+| ~~ginny-serve~~ | `ginny/server/` (双端口) |
+| ~~ginny-prometheus~~ | Admin Server `/metrics` |
 | ~~ginny-util/graceful~~ | `errgroup` + LifecycleHook |
 | ~~ginny-util/validation~~ | `interceptor/validation/` |
 
