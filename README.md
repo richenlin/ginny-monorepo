@@ -26,17 +26,14 @@ Ginny 框架及生态组件 v2 统一管理。
 | [ginny-redis](ginny-redis/) | Redis 封装 |
 | [ginny-locker](ginny-locker/) | 分布式锁 |
 | [ginny-asynq](ginny-asynq/) | Asynq 任务队列 |
+| [ginny-util](ginny-util/) | 工具库 (retry / snowflake / ip) |
 
 ## Removed (v2 核心已内置)
 
 | 组件 | 替代方案 |
 |------|---------|
-| ~~ginny-config~~ | `ginny/config/` (koanf) |
-| ~~ginny-log~~ | `log/slog` + `ginny/log/` |
-| ~~ginny-jaeger~~ | `ginny/interceptor/tracing/` (OTel) |
-| ~~ginny-serve~~ | `ginny/server/` (双端口) |
-| ~~ginny-prometheus~~ | Admin Server `/metrics` |
-| ~~ginny-util~~ | 核心内建 |
+| ~~ginny-util/graceful~~ | `errgroup` + LifecycleHook |
+| ~~ginny-util/validation~~ | `interceptor/validation/` |
 
 ## 使用
 

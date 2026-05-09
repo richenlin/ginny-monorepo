@@ -13,4 +13,7 @@ use (
 	./ginny-mongo
 	./ginny-mysql
 	./ginny-redis
+	./ginny-util/ip
+	./ginny-util/retry
+	./ginny-util/snowflake
 )
