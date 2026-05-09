@@ -1,0 +1,11 @@
+app:
+  name: myservice
+  version: 1.0.0
+  env: dev
+server:
+  addr: ":8080"
+admin:
+  addr: ":8081"
+logging:
+  level: info
+  format: json

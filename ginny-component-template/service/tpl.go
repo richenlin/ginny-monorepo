@@ -1,31 +1,26 @@
 package service
 
+const Tpl = `package service
+
 import (
 	"context"
 
-	pb "MODULE_NAME/api/proto"
-
-	"github.com/goriller/ginny/errs"
-	"github.com/goriller/ginny/logger"
-	"go.uber.org/zap"
-	"google.golang.org/grpc/codes"
+	"connectrpc.com/connect"
 )
 
-// METHOD_NAME implements grpc proto METHOD_NAME Method interface.
-func (s *Service) METHOD_NAME(ctx context.Context, req *pb.METHOD_REQNAME) (*pb.METHOD_RESNAME, error) {
-	log := logger.WithContext(ctx).With(zap.String("action", "Hello"))
-	log.Debug("req", zap.Any("req", req))
+// {{ .Name }}Service implements the {{ .Name }} ConnectRPC service.
+type {{ .Name }}Service struct{}
 
-	if req == nil {
-		return nil, errs.New(codes.Code(pb.ErrorCode_CustomNotFound), "the error example for CustomNotFound")
-	}
-	if req.Name == "" {
-		return nil, errs.New(codes.InvalidArgument, "the error example for 4xx")
-	}
-
-	// Demo: 自定义日志字段
-	log.With(zap.String("custom2", "test2")).Info("xxx")
-
-	// 返回结果
-	return &pb.METHOD_RESNAME{}, nil
+// New{{ .Name }}Service creates a new {{ .Name }}Service.
+func New{{ .Name }}Service() *{{ .Name }}Service {
+	return &{{ .Name }}Service{}
 }
+
+// Example handler — replace with your generated handler interface.
+func (s *{{ .Name }}Service) Example(
+	ctx context.Context,
+	req *connect.Request[any],
+) (*connect.Response[any], error) {
+	return connect.NewResponse(nil), nil
+}
+`

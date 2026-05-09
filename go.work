@@ -13,5 +13,4 @@ use (
 	./ginny-mongo
 	./ginny-mysql
 	./ginny-redis
-	./ginny-template
 )

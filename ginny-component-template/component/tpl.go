@@ -1,29 +1,31 @@
-package COMPONENT_TYPE
+package component
+
+const Tpl = `package {{ .Name }}
 
 import (
-	"context"
-
-	"github.com/google/wire"
-	"github.com/goriller/ginny/logger"
-	"go.uber.org/zap"
+	"github.com/goriller/ginny/v2"
 )
 
-// COMPONENT_NAMECOMPONENT_UP_TYPEProviderSet
-var COMPONENT_NAMECOMPONENT_UP_TYPEProviderSet = wire.NewSet(
-	NewCOMPONENT_NAMECOMPONENT_UP_TYPE,
-)
+// Option for {{ .Name }} component.
+type Option func(*options)
 
-// COMPONENT_NAMECOMPONENT_UP_TYPE
-type COMPONENT_NAMECOMPONENT_UP_TYPE struct {
+type options struct{}
+
+// New creates a new {{ .Name }} component.
+func New(opts ...Option) ginny.LifecycleHook {
+	o := &options{}
+	for _, opt := range opts {
+		opt(o)
+	}
+	return &component{opts: o}
 }
 
-// NewCOMPONENT_NAMECOMPONENT_UP_TYPE
-func NewCOMPONENT_NAMECOMPONENT_UP_TYPE() (*COMPONENT_NAMECOMPONENT_UP_TYPE, error) {
-	return &COMPONENT_NAMECOMPONENT_UP_TYPE{}, nil
+type component struct {
+	opts *options
 }
 
-func (p *COMPONENT_NAMECOMPONENT_UP_TYPE) Test(ctx context.Context) error {
-	log := logger.WithContext(ctx).With(zap.String("action", "Test"))
-	log.Debug("xx", zap.String("xx", "xx"))
-	return nil
-}
+func (c *component) Name() string                    { return "{{ .Name }}" }
+func (c *component) OnStart(ctx context.Context) error { return nil }
+func (c *component) OnStop(ctx context.Context) error  { return nil }
+func (c *component) Priority() int                    { return 50 }
+`

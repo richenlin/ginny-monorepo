@@ -7,10 +7,10 @@ Ginny 框架及生态组件 v2 统一管理。
 | 模块 | 说明 | 状态 |
 |------|------|------|
 | **[ginny](ginny/)** | 核心框架 — ConnectRPC + gRPC + gRPC-Web | ✅ v2 |
-| [ginny-cli](ginny-cli/) | CLI 脚手架 | ⚠️ 待升级 |
-| [ginny-demo](ginny-demo/) | 示例项目 | ⚠️ 待升级 |
-| [ginny-template](ginny-template/) | 项目模板 | ⚠️ 待升级 |
-| [ginny-component-template](ginny-component-template/) | 组件模板 | ⚠️ 待升级 |
+| [ginny-cli](ginny-cli/) | CLI 脚手架 | ✅ v2 |
+| [ginny-demo](ginny-demo/) | 示例项目 | ✅ v2 |
+| [ginny-template](ginny-template/) | 项目模板 | ✅ v2 |
+| [ginny-component-template](ginny-component-template/) | 组件模板 | ✅ v2 |
 
 ## Components (v2)
 
