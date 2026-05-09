@@ -29,7 +29,6 @@ func newServer(ctx context.Context, opt *Config) (*Server, error) {
 		redisConnOpt,
 		asynq.Config{
 			Concurrency:  10,
-			Logger:       opt.Logger,
 			ErrorHandler: asynq.ErrorHandlerFunc(HandleErrorFunc),
 			Queues: map[string]int{
 				QueueCritical: 5,

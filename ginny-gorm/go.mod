@@ -4,7 +4,6 @@ go 1.24.0
 
 require (
 	github.com/google/wire v0.5.0
-	github.com/goriller/gorm-plus v0.0.0-20230525100618-49d09b943681
 	github.com/pkg/errors v0.9.1
 	github.com/spf13/viper v1.15.0
 	github.com/stretchr/testify v1.11.1
@@ -22,7 +21,6 @@ require (
 require (
 	github.com/ClickHouse/ch-go v0.53.0 // indirect
 	github.com/ClickHouse/clickhouse-go/v2 v2.8.3 // indirect
-	github.com/acmestack/gorm-plus v0.0.15 // indirect
 	github.com/andybalholm/brotli v1.0.5 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/fsnotify/fsnotify v1.6.0 // indirect

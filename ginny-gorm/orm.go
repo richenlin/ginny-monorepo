@@ -8,7 +8,6 @@ import (
 
 	"github.com/google/wire"
 	"github.com/goriller/ginny-gorm/v2/dialector"
-	"github.com/goriller/gorm-plus/gplus"
 	"github.com/pkg/errors"
 	"gorm.io/gorm"
 	"gorm.io/plugin/dbresolver"
@@ -50,7 +49,8 @@ func New(ctx context.Context, conf *Config) (*gorm.DB, error) {
 		return nil, err
 	}
 
-	gplus.Init(mdb)
+	// InitGPlus optionally initializes gorm-plus (requires: go get github.com/goriller/gorm-plus)
+// gplus.Init(mdb)
 
 	return mdb, nil
 }
