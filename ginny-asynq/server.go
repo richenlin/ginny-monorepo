@@ -3,18 +3,17 @@ package asyncq
 import (
 	"context"
 	"fmt"
+	"log/slog"
 
 	"github.com/go-redis/redis/v8"
-	"github.com/goriller/ginny-util/graceful"
-	"github.com/goriller/ginny/logger"
 	"github.com/hibiken/asynq"
-	"github.com/pkg/errors"
-	"go.uber.org/zap"
 )
 
+// Server wraps the asynq server for processing tasks.
 type Server struct {
 	server     *asynq.Server
 	Dispatcher *taskDispatcher
+	logger     *slog.Logger
 }
 
 func newServer(ctx context.Context, opt *Config) (*Server, error) {
@@ -29,7 +28,6 @@ func newServer(ctx context.Context, opt *Config) (*Server, error) {
 	server := asynq.NewServer(
 		redisConnOpt,
 		asynq.Config{
-			// Specify how many concurrent workers to use
 			Concurrency:  10,
 			Logger:       opt.Logger,
 			ErrorHandler: asynq.ErrorHandlerFunc(HandleErrorFunc),
@@ -48,19 +46,15 @@ func newServer(ctx context.Context, opt *Config) (*Server, error) {
 
 	dispatcher := newDispatcher(d)
 
-	graceful.AddCloser(func(ctx context.Context) error {
-		server.Shutdown()
-		return nil
-	})
-
 	return &Server{
 		server:     server,
 		Dispatcher: dispatcher,
+		logger:     opt.Logger,
 	}, nil
 }
 
-func (s *Server) Start() error {
-	// mux maps a type to a handler
+// Run starts the asynq server. This blocks until the server is stopped.
+func (s *Server) Run() error {
 	mux := asynq.NewServeMux()
 	mux.Use(loggingMiddleware)
 	mux.HandleFunc(dispatcherName, s.Dispatcher.ProcessTask)
@@ -70,9 +64,15 @@ func (s *Server) Start() error {
 	return nil
 }
 
+// Shutdown gracefully stops the asynq server.
+func (s *Server) Shutdown() {
+	s.server.Shutdown()
+}
+
+// HandleErrorFunc is the default error handler for asynq tasks.
 func HandleErrorFunc(ctx context.Context, task *asynq.Task, err error) {
-	log := logger.WithContext(ctx)
-	log.Error("TaskServer handler error", zap.Error(errors.WithStack(err)))
-	// report error
-	// ReportService.Notify(err)
+	slog.ErrorContext(ctx, "TaskServer handler error",
+		slog.String("error", err.Error()),
+		slog.String("task_type", task.Type()),
+	)
 }

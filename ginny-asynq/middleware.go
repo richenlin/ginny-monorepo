@@ -3,26 +3,30 @@ package asyncq
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"time"
 
-	"github.com/goriller/ginny/logger"
 	"github.com/hibiken/asynq"
-	"go.uber.org/zap"
 )
 
-// loggingMiddleware 记录任务日志中间件
+// loggingMiddleware logs task processing.
 func loggingMiddleware(h asynq.Handler) asynq.Handler {
 	return asynq.HandlerFunc(func(ctx context.Context, t *asynq.Task) error {
-		log := logger.WithContext(ctx)
 		start := time.Now()
 		rw := t.ResultWriter()
-		log.Info("Start processing ", zap.String("TaskID", rw.TaskID()))
+		slog.InfoContext(ctx, "Start processing",
+			slog.String("TaskID", rw.TaskID()),
+		)
 		err := h.ProcessTask(ctx, t)
 		if err != nil {
-			log.Info("Faild processing ", zap.String("TaskID", rw.TaskID()), zap.Error(err))
+			slog.InfoContext(ctx, "Failed processing",
+				slog.String("TaskID", rw.TaskID()),
+				slog.String("error", err.Error()),
+			)
 			return err
 		}
-		log.Info(fmt.Sprintf("Finished processing %q: Elapsed Time = %v", rw.TaskID(), time.Since(start)))
+		slog.InfoContext(ctx, fmt.Sprintf("Finished processing %q: Elapsed Time = %v",
+			rw.TaskID(), time.Since(start)))
 		return nil
 	})
 }

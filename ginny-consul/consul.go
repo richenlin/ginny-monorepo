@@ -2,25 +2,26 @@ package consul
 
 import (
 	"context"
+	"fmt"
+	"math/rand"
 	"net/url"
 	"strconv"
+	"time"
 
 	"github.com/duke-git/lancet/cryptor"
 	"github.com/google/wire"
 	consulApi "github.com/hashicorp/consul/api"
 	"github.com/pkg/errors"
 	"github.com/spf13/viper"
-	"google.golang.org/grpc/resolver"
 )
+
+// scheme is the URI scheme for consul resolver
+const scheme = "consul"
 
 // ProviderSet
 var (
 	ProviderSet = wire.NewSet(NewClient, NewOptions)
 )
-
-func init() {
-	resolver.Register(NewBuilder())
-}
 
 // NewOptions
 func NewOptions(v *viper.Viper) (*consulApi.Config, error) {
@@ -102,8 +103,27 @@ func (p *Client) ServiceDeregister(ctx context.Context, service string) error {
 	return p.Client.Agent().ServiceDeregister(service)
 }
 
-// Resolver
+// Resolver resolves a consul service to a healthy address.
 func (p *Client) Resolver(ctx context.Context, service string, tags []string) (addr string, err error) {
-	r := newConsulResolver(service, tags, nil, p.Client, healthFilterOnlyHealthy)
-	return r.Resolver(ctx)
+	opts := (&consulApi.QueryOptions{}).WithContext(ctx)
+	services, _, err := p.Client.Health().ServiceMultipleTags(service, tags, true, opts)
+	if err != nil {
+		return "", fmt.Errorf("error retrieving instances from consul: %s, %v, %w", service, tags, err)
+	}
+
+	if len(services) == 0 {
+		return "", fmt.Errorf("no healthy instances for service: %s, tags: %v", service, tags)
+	}
+
+	// Randomly select a healthy instance
+	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
+	i := rng.Intn(len(services))
+	svc := services[i]
+
+	host := svc.Service.Address
+	if host == "" {
+		host = svc.Node.Address
+	}
+
+	return fmt.Sprintf("%s:%d", host, svc.Service.Port), nil
 }

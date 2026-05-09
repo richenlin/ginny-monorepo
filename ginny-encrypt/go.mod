@@ -1,3 +1,5 @@
-module github.com/goriller/ginny-encrypt
+module github.com/goriller/ginny-encrypt/v2
 
-go 1.16
+go 1.22
+
+require github.com/goriller/ginny-encrypt v0.0.3

@@ -3,10 +3,10 @@ package asyncq
 import (
 	"context"
 
-	"github.com/goriller/ginny-util/graceful"
 	"github.com/hibiken/asynq"
 )
 
+// Client wraps the asynq client for enqueuing tasks.
 type Client struct {
 	client    *asynq.Client
 	Inspector *asynq.Inspector
@@ -22,9 +22,6 @@ func newClient(ctx context.Context, opt *Config) (*Client, error) {
 		redisConnOpt = opt.redisClientOpt
 	}
 	client := asynq.NewClient(redisConnOpt)
-	graceful.AddCloser(func(ctx context.Context) error {
-		return client.Close()
-	})
 
 	return &Client{
 		client:    client,
@@ -32,6 +29,12 @@ func newClient(ctx context.Context, opt *Config) (*Client, error) {
 	}, nil
 }
 
+// EnqueueContext enqueues a task with optional settings.
 func (c *Client) EnqueueContext(ctx context.Context, task *asynq.Task, opts ...asynq.Option) (*asynq.TaskInfo, error) {
 	return c.client.EnqueueContext(ctx, task, opts...)
+}
+
+// Close shuts down the asynq client.
+func (c *Client) Close() error {
+	return c.client.Close()
 }

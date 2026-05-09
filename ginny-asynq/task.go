@@ -4,20 +4,17 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"time"
 
-	"github.com/goriller/ginny/logger"
 	"github.com/hibiken/asynq"
-	"go.uber.org/zap"
 )
 
 var (
-	// default
 	defaultQueue = "default"
 )
 
 const (
-	// queue name
 	QueueCritical = "critical"
 	QueueDefault  = "default"
 	QueueLow      = "low"
@@ -31,7 +28,7 @@ const (
 	Critical
 )
 
-// Optional the Options for this module
+// Optional configures a task's properties.
 type Optional func(*taskInfo)
 type HandlerFunc = func(context.Context, interface{}) (interface{}, error)
 type CallHandlerFunc = func(context.Context, interface{})
@@ -39,34 +36,33 @@ type CallErrHandlerFunc = func(context.Context, interface{}, error)
 
 var (
 	defaultCallHandlerFunc = func(ctx context.Context, param interface{}) {
-		log := logger.WithContext(ctx)
-		log.Info("onSuccess: ",
-			zap.Any("param", param))
+		slog.DebugContext(ctx, "onSuccess", slog.Any("param", param))
 	}
 	defaultCallErrHandlerFunc = func(ctx context.Context, param interface{}, err error) {
-		log := logger.WithContext(ctx)
-		log.Error("onError: ",
-			zap.Any("param", param), zap.Error(err))
+		slog.ErrorContext(ctx, "onError",
+			slog.Any("param", param),
+			slog.String("error", err.Error()),
+		)
 	}
 )
 
-// taskInfo is used to dispatch tasks to registered handlers.
+// taskInfo describes a registered async task.
 type taskInfo struct {
-	Step       []StepInfo // 步骤处理函数
-	RetryTimes int        // 任务重试次数
-	TimeOut    int        // 任务超时时间 s
-	ProcessIn  int        // 任务延迟执行 s
+	Step       []StepInfo // step handler functions
+	RetryTimes int        // task retry count
+	TimeOut    int        // task timeout in seconds
+	ProcessIn  int        // task delay in seconds
 	Queue      string
 	OnSuccess  CallHandlerFunc
 	OnError    CallErrHandlerFunc
 }
 
-// StepInfo
+// StepInfo describes a single processing step.
 type StepInfo struct {
-	Fn          HandlerFunc // 注意第一个Fn入参类型是 map[string]interface{}
-	RetryTimes  int         // 单步重试次数
-	RetryPeriod int         // 单步重试间隔, Millisecond(毫秒)
-	TimeOut     int         // 单步超时时间, Millisecond(毫秒)
+	Fn          HandlerFunc // first Fn input type is map[string]interface{}
+	RetryTimes  int         // step retry count
+	RetryPeriod int         // retry interval in milliseconds
+	TimeOut     int         // step timeout in milliseconds
 }
 
 type taskArg struct {
@@ -75,7 +71,7 @@ type taskArg struct {
 	Arg      interface{}
 }
 
-// WithRetryTimes
+// WithRetryTimes sets the task-level retry count.
 func WithRetryTimes(r int) Optional {
 	return func(t *taskInfo) {
 		if r > 0 {
@@ -84,7 +80,7 @@ func WithRetryTimes(r int) Optional {
 	}
 }
 
-// WithTimeOut
+// WithTimeOut sets the task-level timeout in seconds.
 func WithTimeOut(r int) Optional {
 	return func(t *taskInfo) {
 		if r > 0 {
@@ -93,7 +89,7 @@ func WithTimeOut(r int) Optional {
 	}
 }
 
-// WithProcessIn
+// WithProcessIn delays task execution by r seconds.
 func WithProcessIn(r int) Optional {
 	return func(t *taskInfo) {
 		if r > 0 {
@@ -102,7 +98,7 @@ func WithProcessIn(r int) Optional {
 	}
 }
 
-// WithQueue
+// WithQueue sets the task queue.
 func WithQueue(s queueType) Optional {
 	return func(t *taskInfo) {
 		switch s {
@@ -116,7 +112,7 @@ func WithQueue(s queueType) Optional {
 	}
 }
 
-// WithOnSuccess
+// WithOnSuccess sets the success callback.
 func WithOnSuccess(f CallHandlerFunc) Optional {
 	return func(t *taskInfo) {
 		if f != nil {
@@ -125,7 +121,7 @@ func WithOnSuccess(f CallHandlerFunc) Optional {
 	}
 }
 
-// WithOnError
+// WithOnError sets the error callback.
 func WithOnError(f CallErrHandlerFunc) Optional {
 	return func(t *taskInfo) {
 		if f != nil {
@@ -134,13 +130,13 @@ func WithOnError(f CallErrHandlerFunc) Optional {
 	}
 }
 
-// NewTask 声明异步任务
+// NewTask registers an async task.
 func (a *Asyncq) NewTask(ctx context.Context, taskType string,
 	step []StepInfo, opt ...Optional) {
 
 	task := &taskInfo{
-		RetryTimes: 2,           // 任务队列重试次数
-		TimeOut:    60 * 60 * 6, // 任务队列最大执行时间6小时
+		RetryTimes: 2,
+		TimeOut:    60 * 60 * 6,
 		Step:       step,
 		Queue:      defaultQueue,
 	}
@@ -157,11 +153,11 @@ func (a *Asyncq) NewTask(ctx context.Context, taskType string,
 	a.Server.Dispatcher.SetTask(taskType, task)
 }
 
-// InvorkTask 触发执行任务,传入异步任务参数
+// InvorkTask triggers execution of a registered task.
 func (a *Asyncq) InvorkTask(ctx context.Context, taskType string, param interface{}) (string, error) {
 	task := a.Server.Dispatcher.GetTask(taskType)
 	if task == nil {
-		return "", fmt.Errorf("An asynchronous task must be declared before triggering the execution of the task")
+		return "", fmt.Errorf("an asynchronous task must be declared before triggering the execution of the task")
 	}
 
 	arg := &taskArg{
@@ -173,18 +169,17 @@ func (a *Asyncq) InvorkTask(ctx context.Context, taskType string, param interfac
 	if err != nil {
 		return "", err
 	}
-	// log.Info("触发异步任务: %s, param: %v", taskType, string(bt))
 	t := asynq.NewTask(dispatcherName, bt)
 
 	if task.TimeOut == 0 {
-		task.TimeOut = 60 * 60 // 默认最大超时1小时
+		task.TimeOut = 60 * 60
 	}
 	if task.RetryTimes == 0 {
 		task.RetryTimes = 2
 	}
 
 	opt := []asynq.Option{
-		asynq.Retention(24 * 30 * 3 * time.Hour), // 任务完成后默认存储时间
+		asynq.Retention(24 * 30 * 3 * time.Hour),
 		asynq.MaxRetry(task.RetryTimes),
 		asynq.Timeout(time.Second * time.Duration(task.TimeOut)),
 	}
@@ -203,17 +198,18 @@ func (a *Asyncq) InvorkTask(ctx context.Context, taskType string, param interfac
 	return info.ID, nil
 }
 
-// QueryTask 查询异步任务信息
+// QueryTask queries async task info by task ID.
 func (a *Asyncq) QueryTask(ctx context.Context, taskId string) (*asynq.TaskInfo, error) {
 	return a.Client.Inspector.GetTaskInfo(defaultQueue, taskId)
 }
 
-// StopJobError 抛出该错误,Job跳过剩余步骤逻辑,并执行onError回调. Step以及Job的retry不再生效
+// StopJobError returns an error that stops the job and executes OnError callback.
+// Step and job retries are disabled for this error.
 func (a *Asyncq) StopJobError(err error) error {
 	return fmt.Errorf("Stop job: [%w]", &stopJobError{msg: err.Error()})
 }
 
-// ConvertParams
+// ConvertParams converts task params from arg to input.
 func ConvertParams(arg interface{}, input interface{}) error {
 	bt, err := json.Marshal(arg)
 	if err != nil {

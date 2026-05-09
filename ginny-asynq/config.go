@@ -2,6 +2,7 @@ package asyncq
 
 import (
 	"context"
+	"log/slog"
 	"net/url"
 	"strconv"
 	"strings"
@@ -9,16 +10,20 @@ import (
 	"github.com/hibiken/asynq"
 )
 
-// Config
+// Config holds asynq configuration.
 type Config struct {
-	Dsn                    string `json:"dsn" yaml:"dsn"`
+	Dsn string `json:"dsn" yaml:"dsn"`
+
+	// Logger for asynq client/server logging. Optional.
+	Logger *slog.Logger
+
 	redisClientOpt         *asynq.RedisClientOpt
 	redisFailoverClientOpt *asynq.RedisFailoverClientOpt
 	redisClusterClientOpt  *asynq.RedisClusterClientOpt
 	asynq.Config
 }
 
-// NewConfig
+// NewConfig parses a DSN into asynq configuration.
 func NewConfig(ctx context.Context, dsn string) (*Config, error) {
 	u, err := url.Parse(dsn)
 	if err != nil {

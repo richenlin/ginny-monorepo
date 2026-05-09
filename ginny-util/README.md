@@ -1,2 +1,0 @@
-# ginny-util
-ginny utils.

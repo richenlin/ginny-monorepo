@@ -1,10 +1,9 @@
-module github.com/goriller/ginny-gorm
+module github.com/goriller/ginny-gorm/v2
 
-go 1.19
+go 1.22
 
 require (
 	github.com/google/wire v0.5.0
-	github.com/goriller/ginny-util/graceful v0.0.0-20230329082818-d0cdc3cae4d9
 	github.com/goriller/gorm-plus v0.0.0-20230525100618-49d09b943681
 	github.com/pkg/errors v0.9.1
 	github.com/spf13/viper v1.15.0

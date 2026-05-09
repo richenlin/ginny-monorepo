@@ -3,16 +3,15 @@ package asyncq
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"log/slog"
 	"runtime/debug"
 	"sync"
 	"time"
 
 	"github.com/go-redis/redis/v8"
-	"github.com/goriller/ginny/logger"
 	"github.com/hibiken/asynq"
-	"github.com/pkg/errors"
-	"go.uber.org/zap"
 )
 
 var (
@@ -29,27 +28,26 @@ func (e *stopJobError) Error() string {
 
 type ExeFunc = func(ctx context.Context, param interface{}) (interface{}, error)
 
-// taskDispatcher is used to dispatch tasks to registered handlers.
+// taskDispatcher dispatches tasks to registered handlers.
 type taskDispatcher struct {
 	mapping sync.Map
 	Redis   redis.UniversalClient
 }
 
-// newDispatcher
+// newDispatcher creates a new task dispatcher.
 func newDispatcher(r redis.UniversalClient) *taskDispatcher {
-	d := &taskDispatcher{
+	return &taskDispatcher{
 		mapping: sync.Map{},
 		Redis:   r,
 	}
-	return d
 }
 
-// SetTask registers a task
+// SetTask registers a task.
 func (d *taskDispatcher) SetTask(taskType string, task *taskInfo) {
 	d.mapping.Store(taskType, task)
 }
 
-// GetTask get a task
+// GetTask retrieves a registered task.
 func (d *taskDispatcher) GetTask(taskType string) *taskInfo {
 	if val, ok := d.mapping.Load(taskType); ok {
 		if data, ok := val.(*taskInfo); ok {
@@ -59,15 +57,12 @@ func (d *taskDispatcher) GetTask(taskType string) *taskInfo {
 	return nil
 }
 
-// ProcessTask processes a task.
-//
-// NOTE: Dispatcher satisfies asynq.Handler interface.
+// ProcessTask processes a task. Implements asynq.Handler.
 func (d *taskDispatcher) ProcessTask(ctx context.Context, task *asynq.Task) error {
-	log := logger.WithContext(ctx)
 	taskId := task.ResultWriter().TaskID()
 	arg, err := d.GetPayload(ctx, taskId, task)
 	if err != nil {
-		log.Error("GetPayload err: %v", zap.Error(err))
+		slog.ErrorContext(ctx, "GetPayload error", slog.String("error", err.Error()))
 		return err
 	}
 
@@ -78,18 +73,20 @@ func (d *taskDispatcher) ProcessTask(ctx context.Context, task *asynq.Task) erro
 	param = arg.Arg
 	t := d.GetTask(arg.TaskType)
 	if t == nil {
-		return fmt.Errorf("An asynchronous task must be declared before triggering the execution of the task")
+		return fmt.Errorf("an asynchronous task must be declared before triggering the execution of the task")
 	}
 
 	defer func() {
 		if rec := recover(); rec != nil {
 			e := fmt.Errorf("panic: %+v", rec)
-			log.Error("panic: ", zap.String("stack", string(debug.Stack())))
+			slog.ErrorContext(ctx, "panic",
+				slog.String("stack", string(debug.Stack())),
+			)
 			t.OnError(ctx, param, e)
 		}
 	}()
 
-	// step do
+	// process steps
 	for k, v := range t.Step {
 		step := k + 1
 		if arg.Step > 0 && step <= arg.Step {
@@ -97,33 +94,41 @@ func (d *taskDispatcher) ProcessTask(ctx context.Context, task *asynq.Task) erro
 		}
 		arg, err = d.GetPayload(ctx, taskId, task)
 		if err != nil {
-			log.Error("Step err:", zap.String("Type", task.Type()), zap.Int("Step", step), zap.Error(err))
+			slog.ErrorContext(ctx, "Step error",
+				slog.String("type", task.Type()),
+				slog.Int("step", step),
+				slog.String("error", err.Error()),
+			)
 			break
 		}
 		param = arg.Arg
 		res, err = d.RetryCallFunc(ctx, v.Fn, param,
 			v.RetryTimes, v.RetryPeriod, v.TimeOut)
 		if err != nil {
-			log.Error("Handler err:", zap.String("Type", task.Type()), zap.Int("Step", step), zap.Error(err))
+			slog.ErrorContext(ctx, "Handler error",
+				slog.String("type", task.Type()),
+				slog.Int("step", step),
+				slog.String("error", err.Error()),
+			)
 			break
-		} else {
-			if res != nil {
-				arg.Arg = res
-			}
-			arg.Step = step
-			err = d.SetPayload(ctx, taskId, arg)
-			if err != nil {
-				log.Error("Step setPayload err:", zap.String("Type", task.Type()), zap.Int("Step", step), zap.Error(err))
-				break
-			}
+		}
+		if res != nil {
+			arg.Arg = res
+		}
+		arg.Step = step
+		err = d.SetPayload(ctx, taskId, arg)
+		if err != nil {
+			slog.ErrorContext(ctx, "Step setPayload error",
+				slog.String("type", task.Type()),
+				slog.Int("step", step),
+				slog.String("error", err.Error()),
+			)
+			break
 		}
 	}
-	// retried, _ := asynq.GetRetryCount(ctx)
-	// maxRetry, _ := asynq.GetMaxRetry(ctx)
+
 	if err != nil {
-		// if retried >= maxRetry {
 		t.OnError(ctx, param, err)
-		// }
 		return err
 	}
 
@@ -131,6 +136,7 @@ func (d *taskDispatcher) ProcessTask(ctx context.Context, task *asynq.Task) erro
 	return nil
 }
 
+// GetPayload retrieves task payload from Redis or task body.
 func (d *taskDispatcher) GetPayload(ctx context.Context, taskId string, task *asynq.Task) (*taskArg, error) {
 	arg := &taskArg{}
 	key := fmt.Sprintf("asynq:{%s}:p:%s", defaultQueue, taskId)
@@ -140,11 +146,12 @@ func (d *taskDispatcher) GetPayload(ctx context.Context, taskId string, task *as
 	}
 	err = json.Unmarshal([]byte(s), arg)
 	if err != nil {
-		return nil, fmt.Errorf("unmarshal task arg faild %v", err.Error())
+		return nil, fmt.Errorf("unmarshal task arg failed: %v", err.Error())
 	}
 	return arg, nil
 }
 
+// SetPayload stores task payload in Redis.
 func (d *taskDispatcher) SetPayload(ctx context.Context, taskId string, arg *taskArg) error {
 	key := fmt.Sprintf("asynq:{%s}:p:%s", defaultQueue, taskId)
 	bt, err := json.Marshal(arg)
@@ -154,7 +161,7 @@ func (d *taskDispatcher) SetPayload(ctx context.Context, taskId string, arg *tas
 	return d.Redis.Set(ctx, key, string(bt), 0).Err()
 }
 
-// RetryCallFunc
+// RetryCallFunc calls a function with retry logic.
 func (d *taskDispatcher) RetryCallFunc(ctx context.Context, fn ExeFunc,
 	params interface{}, retry ...int) (interface{}, error) {
 	var (
@@ -162,7 +169,7 @@ func (d *taskDispatcher) RetryCallFunc(ctx context.Context, fn ExeFunc,
 		result      interface{}
 		retryTimes  int = 1
 		retryPeriod     = 100 * time.Millisecond
-		timeout         = time.Millisecond * 600000 // 单次最大时长默认10分钟
+		timeout         = time.Millisecond * 600000
 	)
 	l := len(retry)
 	if l == 1 {

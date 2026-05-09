@@ -5,7 +5,6 @@ import (
 	"context"
 	"net/url"
 
-	graceful "github.com/goriller/ginny-util/graceful"
 	"go.uber.org/zap"
 )
 
@@ -59,9 +58,6 @@ func (b *Broker) Init(ctx context.Context, log *zap.Logger, u *url.URL) error {
 		}
 	}
 	if b.mq != nil {
-		graceful.AddCloser(func(ctx context.Context) error {
-			return b.mq.Close(ctx)
-		})
 		return b.mq.Init(ctx, log, u)
 	}
 

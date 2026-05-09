@@ -8,7 +8,6 @@ import (
 	"time"
 
 	_ "github.com/go-sql-driver/mysql" // init mysql driver
-	"github.com/goriller/ginny-util/graceful"
 	"go.uber.org/zap"
 )
 
@@ -50,11 +49,6 @@ func NewMysqlDB(ctx context.Context, config *Config, logger *zap.Logger) (*Mysql
 		readDBs: readDBs,
 		logger:  logger,
 	}
-
-	// graceful
-	graceful.AddCloser(func(ctx context.Context) error {
-		return db.Close()
-	})
 
 	return db, nil
 }

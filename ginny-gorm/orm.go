@@ -7,8 +7,7 @@ import (
 	"time"
 
 	"github.com/google/wire"
-	"github.com/goriller/ginny-gorm/dialector"
-	"github.com/goriller/ginny-util/graceful"
+	"github.com/goriller/ginny-gorm/v2/dialector"
 	"github.com/goriller/gorm-plus/gplus"
 	"github.com/pkg/errors"
 	"gorm.io/gorm"
@@ -83,15 +82,6 @@ func newDB(ctx context.Context, dsn string, conf *Config) (*gorm.DB, error) {
 		return nil, errors.Wrap(err, "not support")
 	}
 	db, err := gorm.Open(conf.dialector, conf)
-
-	// graceful
-	graceful.AddCloser(func(ctx context.Context) error {
-		dbInstance, err := db.DB()
-		if err != nil {
-			return err
-		}
-		return dbInstance.Close()
-	})
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect database")

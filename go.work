@@ -4,19 +4,14 @@ use (
 	./ginny
 	./ginny-asynq
 	./ginny-broker
-	./ginny-config
 	./ginny-consul
 	./ginny-demo
 	./ginny-desensitivity
 	./ginny-encrypt
 	./ginny-gorm
-	./ginny-jaeger
 	./ginny-locker
-	./ginny-log
 	./ginny-mongo
 	./ginny-mysql
-	./ginny-prometheus
 	./ginny-redis
-	./ginny-serve
 	./ginny-template
 )

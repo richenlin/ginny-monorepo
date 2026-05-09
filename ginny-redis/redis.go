@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/go-redis/redis/v8"
-	"github.com/goriller/ginny-util/graceful"
 	"go.uber.org/zap"
 )
 
@@ -30,10 +29,6 @@ func NewRedis(ctx context.Context, config *Config, logger *zap.Logger) (*Redis, 
 	} else {
 		return nil, errors.New("invalid deploy mode config")
 	}
-	// graceful
-	graceful.AddCloser(func(ctx context.Context) error {
-		return client.Close()
-	})
 
 	return &Redis{
 		logger: logger.With(zap.String("type", "RedisRedis")),

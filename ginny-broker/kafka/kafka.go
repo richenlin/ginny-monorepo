@@ -12,7 +12,7 @@ import (
 
 	"github.com/Shopify/sarama"
 	"github.com/google/uuid"
-	broker "github.com/goriller/ginny-broker"
+	broker "github.com/goriller/ginny-broker/v2"
 	"go.uber.org/zap"
 )
 
